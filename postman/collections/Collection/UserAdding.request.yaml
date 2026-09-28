@@ -1,0 +1,13 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/users/adduser
+method: POST
+body:
+  type: json
+  content: |-
+    {
+        "firstName": "Monish",
+        "lastName": "Jade",
+        "email": "monish@gmail.com"
+    }
+order: 1789704168802

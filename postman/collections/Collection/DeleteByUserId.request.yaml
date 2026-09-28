@@ -1,0 +1,5 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/users/delete/9be188e0-efa5-4a49-b3c6-053120ea4651
+method: DELETE
+order: 3904254335934897
