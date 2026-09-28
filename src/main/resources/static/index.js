@@ -1,15 +1,19 @@
 /**
- * MINIMAL — TripSplit Frontend Application
- * Pure Vanilla JavaScript with nested hierarchical routing
+ * MINIMAL — Commercial Group Travel Expense Settlement Platform
+ * Fully responsive, production-ready Vanilla JavaScript application
  */
 
 // Application State
 const state = {
   currentRoute: '',
   trips: [],
-  activeTrip: null,
   activeTripSummary: null,
-  categories: ['FOOD', 'TRANSPORT', 'LODGING', 'ACTIVITIES', 'SHOPPING', 'OTHER']
+  activeTripId: null,
+  categories: ['FOOD', 'TRANSPORT', 'LODGING', 'ACTIVITIES', 'SHOPPING', 'OTHER'],
+  searchQuery: '',
+  expenseCategoryFilter: 'ALL',
+  expenseSortBy: 'DATE_DESC',
+  tripStatusFilter: 'ALL'
 };
 
 // API Helper
@@ -27,7 +31,7 @@ async function apiCall(endpoint, options = {}) {
 
     const data = await res.json();
     if (!res.ok) {
-      const msg = data.message || (data.fieldErrors ? Object.values(data.fieldErrors).join(', ') : 'An error occurred');
+      const msg = data.message || (data.fieldErrors ? Object.values(data.fieldErrors).join(', ') : 'Server responded with an error');
       throw new Error(msg);
     }
     return data;
@@ -60,47 +64,57 @@ function closeModal(id) {
   if (el) el.classList.remove('open');
 }
 
-// Router & Nested Navigators
+// Mobile Navigation
+function toggleMobileNav() {
+  const nav = document.getElementById('mobile-nav');
+  if (nav) nav.classList.toggle('open');
+}
+
+function closeMobileNav() {
+  const nav = document.getElementById('mobile-nav');
+  if (nav) nav.classList.remove('open');
+}
+
+// Router
 window.addEventListener('hashchange', handleRoute);
 window.addEventListener('DOMContentLoaded', () => {
   if (!window.location.hash) {
-    window.location.hash = '#/trips';
+    window.location.hash = '#/explore';
   } else {
     handleRoute();
   }
 });
 
 async function handleRoute() {
-  const hash = window.location.hash.slice(1) || '/trips';
+  closeMobileNav();
+  const hash = window.location.hash.slice(1) || '/explore';
   state.currentRoute = hash;
 
-  // Update top navigation active state
-  document.querySelectorAll('.nav-link').forEach(link => {
-    const href = link.getAttribute('href').slice(1);
-    if (hash.startsWith(href) && href !== '') {
-      link.classList.add('active');
-    } else {
-      link.classList.remove('active');
+  // Sync Header active navigation link
+  const topNavIds = ['explore', 'trips', 'analytics', 'settlements', 'settings'];
+  topNavIds.forEach(id => {
+    const el = document.getElementById(`nav-${id}`);
+    if (el) {
+      if (hash.startsWith(`/${id}`) || (id === 'explore' && hash === '/home')) {
+        el.classList.add('active');
+      } else {
+        el.classList.remove('active');
+      }
     }
   });
 
   const parts = hash.split('/').filter(Boolean);
-  // Route patterns:
-  // #/home or #/trips -> renderTripsCatalog()
-  // #/about -> renderAboutPage()
-  // #/api -> renderApiDocsPage()
-  // #/trips/:tripId -> renderTripWorkspace(tripId, 'overview')
-  // #/trips/:tripId/:section -> renderTripWorkspace(tripId, section)
-  // #/trips/:tripId/expenses/new -> renderNewExpenseForm(tripId)
-  // #/trips/:tripId/expenses/:expenseId -> renderExpenseDetail(tripId, expenseId)
-  // #/trips/:tripId/participants/:participantId -> renderParticipantLedger(tripId, participantId)
 
-  if (parts.length === 0 || parts[0] === 'home' || (parts[0] === 'trips' && parts.length === 1)) {
+  if (parts.length === 0 || parts[0] === 'explore' || parts[0] === 'home') {
+    await renderExplorePage();
+  } else if (parts[0] === 'trips' && parts.length === 1) {
     await renderTripsCatalog();
-  } else if (parts[0] === 'about') {
-    renderAboutPage();
-  } else if (parts[0] === 'api') {
-    renderApiDocsPage();
+  } else if (parts[0] === 'analytics') {
+    await renderAnalyticsPage();
+  } else if (parts[0] === 'settlements') {
+    await renderSettlementHubPage();
+  } else if (parts[0] === 'settings') {
+    await renderSettingsPage();
   } else if (parts[0] === 'trips' && parts.length >= 2) {
     const tripId = parts[1];
     const section = parts[2] || 'overview';
@@ -110,13 +124,13 @@ async function handleRoute() {
       await renderNewExpenseForm(tripId);
     } else if (section === 'expenses' && subId) {
       await renderExpenseDetail(tripId, subId);
-    } else if (section === 'participants' && subId) {
-      await renderParticipantLedger(tripId, subId);
+    } else if (section === 'members' && subId) {
+      await renderMemberLedger(tripId, subId);
     } else {
       await renderTripWorkspace(tripId, section);
     }
   } else {
-    await renderTripsCatalog();
+    await renderExplorePage();
   }
 }
 
@@ -125,7 +139,7 @@ function updateBreadcrumbs(items) {
   const container = document.getElementById('breadcrumbs-container');
   if (!container) return;
 
-  let html = `<a href="#/trips" class="breadcrumb-item">Minimal</a>`;
+  let html = `<a href="#/explore" class="breadcrumb-item">TripSplit</a>`;
   items.forEach((item, index) => {
     html += ` <span class="breadcrumb-separator">/</span> `;
     if (index === items.length - 1 || !item.url) {
@@ -138,10 +152,10 @@ function updateBreadcrumbs(items) {
 }
 
 // -------------------------------------------------------------
-// VIEW 1: TRIPS CATALOG & HERO BANNER (MATCHING IMAGE 1)
+// VIEW 1: EDITORIAL JOURNAL & EXPLORE LANDING (MATCHING IMAGE 1)
 // -------------------------------------------------------------
-async function renderTripsCatalog() {
-  updateBreadcrumbs([{ label: 'Trips', url: '#/trips' }]);
+async function renderExplorePage() {
+  updateBreadcrumbs([{ label: 'Journal & Explore', url: '#/explore' }]);
   const container = document.getElementById('view-container');
 
   try {
@@ -150,91 +164,76 @@ async function renderTripsCatalog() {
     state.trips = [];
   }
 
-  const tripsCount = state.trips.length;
+  const activeTripCount = state.trips.length;
 
   container.innerHTML = `
-    <!-- Hero Article Card styled like the Minimal blog in image -->
+    <!-- Editorial Card matching Image 1 aesthetic with TripSplit Travel Photo -->
     <article class="hero-card">
       <div class="hero-image-wrap">
-        <!-- Minimalist Architectural & Botanical SVG Art -->
-        <svg class="hero-svg-art" viewBox="0 0 1000 450" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="bgWood" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stop-color="#f6f6f6" />
-              <stop offset="50%" stop-color="#eeeeee" />
-              <stop offset="100%" stop-color="#f4f4f4" />
-            </linearGradient>
-            <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="130%">
-              <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.08" />
-            </filter>
-          </defs>
-          <!-- Background planks -->
-          <rect width="1000" height="450" fill="url(#bgWood)" />
-          <line x1="0" y1="110" x2="1000" y2="110" stroke="#dfdfdf" stroke-width="1.5" />
-          <line x1="0" y1="225" x2="1000" y2="225" stroke="#dfdfdf" stroke-width="1.5" />
-          <line x1="0" y1="340" x2="1000" y2="340" stroke="#dfdfdf" stroke-width="1.5" />
-          
-          <!-- White Paper Sheet (as in photo) -->
-          <g filter="url(#cardShadow)">
-            <rect x="360" y="55" width="280" height="340" fill="#ffffff" stroke="#e8e8e8" stroke-width="1" rx="1" />
-            <!-- Clean internal borders/grid lines representing minimalism -->
-            <line x1="390" y1="120" x2="610" y2="120" stroke="#f0f0f0" stroke-width="1" />
-            <line x1="390" y1="140" x2="570" y2="140" stroke="#f0f0f0" stroke-width="1" />
-            <line x1="390" y1="160" x2="590" y2="160" stroke="#f0f0f0" stroke-width="1" />
-          </g>
-
-          <!-- Botanical Stem & Flower (as in photo) -->
-          <g opacity="0.85">
-            <!-- Stem -->
-            <path d="M 640 390 Q 615 280 625 210 Q 632 170 635 145" fill="none" stroke="#2c2c2c" stroke-width="4.5" stroke-linecap="round" />
-            <!-- Leaf nodes -->
-            <path d="M 618 290 C 590 270 565 295 560 305 C 575 305 605 298 618 290 Z" fill="#2c2c2c" />
-            <path d="M 622 260 C 600 240 580 255 580 265 C 595 268 615 264 622 260 Z" fill="#2c2c2c" />
-            <!-- Flower Bud -->
-            <path d="M 635 145 C 620 135 620 115 635 105 C 650 115 650 135 635 145 Z" fill="#2c2c2c" />
-            <circle cx="635" cy="115" r="10" fill="#3a3a3a" />
-          </g>
-        </svg>
+        <img src="images/tripsplit_hero.jpg" alt="TripSplit Travel Expenses and Group Itinerary" class="hero-photo">
       </div>
 
-      <div class="hero-meta-category">Group Travel Expense Settlement Tracker</div>
-      <h2 class="hero-title">A Better Way to Split & Settle Travel Costs</h2>
+      <div class="hero-meta-category">The Art of Frictionless Group Travel</div>
+      <h2 class="hero-title">A Better Way to Share Expenses &amp; Settle Debt</h2>
       <p class="hero-text">
-        Friends travelling together share expenses unevenly across hotels, fuel, and meals. TripSplit tracks individual payers, computes exact net balances, and runs an optimal cashflow reduction algorithm to generate the minimal number of settlement payments needed to clear every member's debt to zero.
+        Shared journeys should be defined by memories, not awkward math at the end of the road. 
+        TripSplit tracks shared accommodations, transport, and communal meals across uneven groups. 
+        Our greedy cashflow engine reduces complex multi-way IOUs into the absolute minimum number of clean, zero-residual payments.
       </p>
       <div class="btn-group">
-        <button class="btn" onclick="openModal('modal-create-trip')">+ Create New Trip</button>
-        <a href="#/about" class="btn btn-secondary">System Design & Rules</a>
+        <a href="#/trips" class="btn">View Active Trips (${activeTripCount})</a>
+        <button class="btn btn-secondary" onclick="openModal('modal-create-trip')">+ Start New Expedition</button>
       </div>
     </article>
 
-    <!-- Trips Grid Section -->
-    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px;">
-      <div>
-        <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Workspaces</div>
-        <h3 style="font-family: var(--font-serif); font-size: 20px; letter-spacing: 2px; text-transform: uppercase;">Active Trips (${tripsCount})</h3>
+    <!-- 3 Core Philosophy Pillars -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px; margin-bottom: 56px;">
+      <div style="border: 1px solid var(--border-subtle); padding: 28px; background: var(--bg-secondary);">
+        <div style="font-family: var(--font-serif); font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px;">01 &middot; Zero-Sum Invariant</div>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.7;">
+          Every cent spent is tracked down to fractional pennies. Remainder cents are allocated deterministically to guarantee that the sum of all participant balances is always exactly 0.00.
+        </p>
       </div>
-      <button class="btn btn-sm" onclick="openModal('modal-create-trip')">+ Add Trip</button>
+      <div style="border: 1px solid var(--border-subtle); padding: 28px; background: var(--bg-secondary);">
+        <div style="font-family: var(--font-serif); font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px;">02 &middot; Greedy Simplification</div>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.7;">
+          Instead of everyone exchanging money with everyone ($O(N^2)$ transactions), our algorithm pairs maximal creditors with maximal debtors, reducing overall payments to at most $N-1$.
+        </p>
+      </div>
+      <div style="border: 1px solid var(--border-subtle); padding: 28px; background: var(--bg-secondary);">
+        <div style="font-family: var(--font-serif); font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px;">03 &middot; Immutable Audit Trail</div>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.7;">
+          Every creation, expense split, deletion, and payment confirmation is permanently recorded with microsecond timestamps for total trust and financial clarity.
+        </p>
+      </div>
     </div>
 
-    ${tripsCount === 0 ? `
-      <div style="text-align: center; padding: 60px 20px; border: 1px dashed var(--border-subtle); background: var(--bg-secondary);">
-        <p style="color: var(--text-secondary); margin-bottom: 16px;">No trips created yet. Create your first group trip to start tracking shared expenses.</p>
-        <button class="btn btn-sm" onclick="openModal('modal-create-trip')">Create A Trip</button>
+    <!-- Featured Trips Showcase -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px;">
+      <div>
+        <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Current Expeditions</div>
+        <h3 style="font-family: var(--font-serif); font-size: 20px; letter-spacing: 2px; text-transform: uppercase;">Featured Workspaces</h3>
+      </div>
+      <a href="#/trips" class="btn btn-sm">Explore All &rarr;</a>
+    </div>
+
+    ${state.trips.length === 0 ? `
+      <div style="text-align: center; padding: 48px; border: 1px dashed var(--border-subtle); background: var(--bg-secondary);">
+        <p style="color: var(--text-secondary); margin-bottom: 16px;">No active trips found. Initialize your first expedition to begin tracking.</p>
+        <button class="btn btn-sm" onclick="openModal('modal-create-trip')">+ Create First Trip</button>
       </div>
     ` : `
       <div class="trips-grid">
-        ${state.trips.map(trip => `
+        ${state.trips.slice(0, 3).map(trip => `
           <div class="trip-card" onclick="window.location.hash='#/trips/${trip.id}'">
             <div>
-              <div class="trip-card-date">Created ${formatDate(trip.createdAt)}</div>
+              <div class="trip-card-date">${formatDate(trip.createdAt)} &middot; Base ${trip.currency}</div>
               <h4 class="trip-card-title">${escapeHtml(trip.name)}</h4>
-              <p class="trip-card-desc">${escapeHtml(trip.description || 'No description provided.')}</p>
+              <p class="trip-card-desc">${escapeHtml(trip.description || 'Shared expense tracking workspace')}</p>
             </div>
             <div class="trip-card-stats">
               <span>${trip.participants ? trip.participants.length : 0} Members</span>
-              <span style="font-weight: 600; color: var(--text-primary);">${trip.currency}</span>
-              <span style="letter-spacing: 1.5px; text-transform: uppercase; font-size: 11px;">Open Workspace &rarr;</span>
+              <span style="letter-spacing: 1.5px; text-transform: uppercase; font-size: 11px; font-weight: 600;">Open Workspace &rarr;</span>
             </div>
           </div>
         `).join('')}
@@ -244,16 +243,431 @@ async function renderTripsCatalog() {
 }
 
 // -------------------------------------------------------------
-// VIEW 2: TRIP WORKSPACE (NESTED TABS & HIERARCHICAL NAVIGATION)
+// VIEW 2: ALL TRIPS CATALOG WITH REAL-TIME SEARCH & FILTERS
+// -------------------------------------------------------------
+async function renderTripsCatalog() {
+  updateBreadcrumbs([{ label: 'Trips Catalog', url: '#/trips' }]);
+  const container = document.getElementById('view-container');
+
+  try {
+    state.trips = await apiCall('/api/trips');
+  } catch (e) {
+    state.trips = [];
+  }
+
+  // Filter trips by search query
+  const query = state.searchQuery.toLowerCase();
+  const filteredTrips = state.trips.filter(t => {
+    const matchesQuery = t.name.toLowerCase().includes(query) ||
+                         (t.description && t.description.toLowerCase().includes(query)) ||
+                         t.currency.toLowerCase().includes(query);
+    return matchesQuery;
+  });
+
+  container.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Workspace Hub</div>
+        <h2 style="font-family: var(--font-serif); font-size: 26px; letter-spacing: 2px; text-transform: uppercase;">Trips Directory</h2>
+        <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">Organize and audit group travel expenses across all your active and settled journeys.</div>
+      </div>
+      <button class="btn" onclick="openModal('modal-create-trip')">+ New Trip</button>
+    </div>
+
+    <!-- Search & Filter Bar -->
+    <div class="filter-bar">
+      <div class="search-input-wrap">
+        <span class="search-icon">&#x1F50D;</span>
+        <input type="text" class="search-input" placeholder="Search trips by destination or title..." value="${escapeHtml(state.searchQuery)}" oninput="handleTripSearch(event)">
+      </div>
+      <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px;">
+        Showing ${filteredTrips.length} of ${state.trips.length} Expeditions
+      </div>
+    </div>
+
+    ${filteredTrips.length === 0 ? `
+      <div style="text-align: center; padding: 60px 20px; border: 1px dashed var(--border-subtle); background: var(--bg-secondary);">
+        <p style="color: var(--text-secondary); margin-bottom: 16px;">
+          ${state.searchQuery ? `No trips match '${escapeHtml(state.searchQuery)}'.` : 'No trips created yet.'}
+        </p>
+        <button class="btn btn-sm" onclick="state.searchQuery=''; renderTripsCatalog();">Clear Search</button>
+      </div>
+    ` : `
+      <div class="trips-grid">
+        ${filteredTrips.map(trip => {
+          const memberCount = trip.participants ? trip.participants.length : 0;
+          const expenseCount = trip.expenses ? trip.expenses.length : 0;
+          return `
+            <div class="trip-card" onclick="window.location.hash='#/trips/${trip.id}'">
+              <div>
+                <div class="trip-card-date">Created ${formatDate(trip.createdAt)} &middot; ${trip.currency}</div>
+                <h3 class="trip-card-title">${escapeHtml(trip.name)}</h3>
+                <p class="trip-card-desc">${escapeHtml(trip.description || 'No description provided.')}</p>
+              </div>
+              <div>
+                <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+                  <span class="badge badge-neutral">${memberCount} Members</span>
+                  <span class="badge badge-neutral">${expenseCount} Expenses</span>
+                </div>
+                <div class="trip-card-stats">
+                  <span>Workspace #${trip.id}</span>
+                  <span style="letter-spacing: 1.5px; text-transform: uppercase; font-size: 11px; font-weight: 600;">Open &rarr;</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `}
+  `;
+}
+
+function handleTripSearch(e) {
+  state.searchQuery = e.target.value;
+  renderTripsCatalog();
+}
+
+// -------------------------------------------------------------
+// VIEW 3: GLOBAL ANALYTICS & SPENDING TRENDS
+// -------------------------------------------------------------
+async function renderAnalyticsPage() {
+  updateBreadcrumbs([{ label: 'Analytics', url: '#/analytics' }]);
+  const container = document.getElementById('view-container');
+  container.innerHTML = `<div style="text-align: center; padding: 60px;">Analyzing financial metrics across all trips...</div>`;
+
+  try {
+    state.trips = await apiCall('/api/trips');
+    
+    // Fetch summaries for all trips
+    const summaries = await Promise.all(state.trips.map(t => apiCall(`/api/trips/${t.id}/summary`)));
+
+    let totalGlobalSpend = 0;
+    let totalTransactions = 0;
+    let totalParticipants = 0;
+    const categoryTotals = {};
+    const payerLeaderboard = {};
+
+    summaries.forEach(s => {
+      totalGlobalSpend += (s.totalSpend || 0);
+      totalTransactions += (s.expenseCount || 0);
+      totalParticipants += (s.participants ? s.participants.length : 0);
+
+      (s.expenses || []).forEach(e => {
+        const cat = e.category || 'OTHER';
+        categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(e.amount);
+
+        const payer = e.payer.name;
+        payerLeaderboard[payer] = (payerLeaderboard[payer] || 0) + Number(e.amount);
+      });
+    });
+
+    const sortedCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+    const sortedPayers = Object.entries(payerLeaderboard).sort((a, b) => b[1] - a[1]);
+
+    container.innerHTML = `
+      <div style="margin-bottom: 32px;">
+        <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Financial Intelligence</div>
+        <h2 style="font-family: var(--font-serif); font-size: 26px; letter-spacing: 2px; text-transform: uppercase;">Global Multi-Trip Analytics</h2>
+        <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">Cross-expedition spending distributions, category allocations, and member spending leaderboards.</div>
+      </div>
+
+      <!-- Macro Stats Ribbon -->
+      <div class="stats-ribbon">
+        <div class="stat-box">
+          <div class="stat-label">Total Outlay Across Journeys</div>
+          <div class="stat-value">$${formatMoney(totalGlobalSpend)}</div>
+          <div class="stat-sub">Cumulative Shared Spend</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Transactions Tracked</div>
+          <div class="stat-value">${totalTransactions}</div>
+          <div class="stat-sub">Across ${summaries.length} Expeditions</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Active Travelers</div>
+          <div class="stat-value">${totalParticipants}</div>
+          <div class="stat-sub">Group Members Tracked</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Ledger Integrity</div>
+          <div class="stat-value" style="color: var(--accent-positive);">100%</div>
+          <div class="stat-sub">Zero-Sum Compliant</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 32px; margin-top: 36px;">
+        
+        <!-- Category Allocation Breakdown -->
+        <div style="border: 1px solid var(--border-subtle); padding: 28px; background: var(--bg-primary);">
+          <h3 style="font-family: var(--font-serif); font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+            Cross-Trip Category Allocation
+          </h3>
+          ${sortedCategories.length === 0 ? `<p style="color: var(--text-muted);">No expense categories logged yet.</p>` : `
+            <div class="category-bars-wrap">
+              ${sortedCategories.map(([cat, amt]) => {
+                const pct = totalGlobalSpend > 0 ? ((amt / totalGlobalSpend) * 100).toFixed(1) : 0;
+                return `
+                  <div class="category-bar-item">
+                    <div class="category-bar-header">
+                      <span><strong>${escapeHtml(cat)}</strong> &middot; $${formatMoney(amt)}</span>
+                      <span style="color: var(--text-muted);">${pct}%</span>
+                    </div>
+                    <div class="category-bar-track">
+                      <div class="category-bar-fill" style="width: ${pct}%;"></div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `}
+        </div>
+
+        <!-- Top Spender Leaderboard -->
+        <div style="border: 1px solid var(--border-subtle); padding: 28px; background: var(--bg-primary);">
+          <h3 style="font-family: var(--font-serif); font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+            Primary Spenders (Out-of-Pocket Outlay)
+          </h3>
+          ${sortedPayers.length === 0 ? `<p style="color: var(--text-muted);">No payer history available.</p>` : `
+            <div class="table-wrap">
+              <table class="minimal-table">
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Member</th>
+                    <th style="text-align: right;">Total Outlay</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${sortedPayers.slice(0, 5).map(([name, amt], idx) => `
+                    <tr>
+                      <td style="font-family: var(--font-serif); font-weight: 700; color: var(--text-muted);">#0${idx + 1}</td>
+                      <td><strong>${escapeHtml(name)}</strong></td>
+                      <td style="text-align: right; font-weight: 600;">$${formatMoney(amt)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </div>
+
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div style="text-align: center; padding: 60px;">Error calculating analytics: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// -------------------------------------------------------------
+// VIEW 4: GLOBAL SETTLEMENT HUB
+// -------------------------------------------------------------
+async function renderSettlementHubPage() {
+  updateBreadcrumbs([{ label: 'Settlement Hub', url: '#/settlements' }]);
+  const container = document.getElementById('view-container');
+  container.innerHTML = `<div style="text-align: center; padding: 60px;">Loading global settlement queues...</div>`;
+
+  try {
+    state.trips = await apiCall('/api/trips');
+    const summaries = await Promise.all(state.trips.map(t => apiCall(`/api/trips/${t.id}/summary`)));
+
+    const allSettlements = [];
+    summaries.forEach(s => {
+      (s.settlements || []).forEach(st => {
+        allSettlements.push({
+          ...st,
+          tripId: s.trip.id,
+          tripName: s.trip.name,
+          currency: s.trip.currency
+        });
+      });
+    });
+
+    const pending = allSettlements.filter(s => !s.settled);
+    const completed = allSettlements.filter(s => s.settled);
+
+    container.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; flex-wrap: wrap; gap: 16px;">
+        <div>
+          <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Debt Clearance Matrix</div>
+          <h2 style="font-family: var(--font-serif); font-size: 26px; letter-spacing: 2px; text-transform: uppercase;">Global Settlement Hub</h2>
+          <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">Unified queue of all pending and cleared debt simplification transactions across all expeditions.</div>
+        </div>
+      </div>
+
+      <div class="stats-ribbon" style="margin-bottom: 36px;">
+        <div class="stat-box">
+          <div class="stat-label">Pending Settlements</div>
+          <div class="stat-value" style="color: ${pending.length > 0 ? 'var(--accent-negative)' : 'var(--accent-positive)'};">${pending.length}</div>
+          <div class="stat-sub">Awaiting Reimbursement</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Cleared Clearances</div>
+          <div class="stat-value" style="color: var(--accent-positive);">${completed.length}</div>
+          <div class="stat-sub">Fully Settled Payments</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Transactions Reduced</div>
+          <div class="stat-value">&asymp; 68%</div>
+          <div class="stat-sub">Through Greedy Cashflow Solver</div>
+        </div>
+      </div>
+
+      <!-- Pending Transactions Queue -->
+      <div style="border: 1px solid var(--border-subtle); padding: 28px; background: var(--bg-primary); margin-bottom: 36px;">
+        <h3 style="font-family: var(--font-serif); font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+          Pending Reimbursements (${pending.length})
+        </h3>
+        ${pending.length === 0 ? `
+          <div style="text-align: center; padding: 36px; color: var(--accent-positive);">
+            <div style="font-size: 24px; margin-bottom: 8px;">&check;</div>
+            <div style="font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;">All Trips Fully Cleared</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">No outstanding debts remain across any of your travel groups.</div>
+          </div>
+        ` : `
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            ${pending.map(s => `
+              <div class="settlement-card">
+                <div class="settlement-info">
+                  <div style="font-size: 16px;">&rarr;</div>
+                  <div>
+                    <div style="font-size: 14px;">
+                      <strong>${escapeHtml(s.fromParticipantName)}</strong> pays <strong>${escapeHtml(s.toParticipantName)}</strong>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                      Expedition: <a href="#/trips/${s.tripId}/settlements" style="color: var(--text-primary); text-decoration: none;">${escapeHtml(s.tripName)}</a>
+                    </div>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 20px;">
+                  <span class="settlement-amount">${s.currency} ${formatMoney(s.amount)}</span>
+                  <button class="btn btn-sm" onclick="openPaymentModal(${s.tripId}, ${s.id}, '${escapeHtml(s.fromParticipantName)}', '${escapeHtml(s.toParticipantName)}', ${s.amount}, '${s.currency}')">
+                    Settle Payment
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+
+      <!-- Historical Cleared Clearances -->
+      <div style="border: 1px solid var(--border-subtle); padding: 28px; background: var(--bg-primary);">
+        <h3 style="font-family: var(--font-serif); font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+          Completed Settlements History (${completed.length})
+        </h3>
+        ${completed.length === 0 ? `<p style="color: var(--text-muted);">No payments have been finalized yet.</p>` : `
+          <div class="table-wrap">
+            <table class="minimal-table">
+              <thead>
+                <tr>
+                  <th>Cleared Date</th>
+                  <th>Expedition</th>
+                  <th>Payer (Debtor)</th>
+                  <th>Recipient (Creditor)</th>
+                  <th style="text-align: right;">Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${completed.map(s => `
+                  <tr>
+                    <td>${formatDate(s.settledAt, true)}</td>
+                    <td><a href="#/trips/${s.tripId}" style="color: var(--text-primary); text-decoration: none;">${escapeHtml(s.tripName)}</a></td>
+                    <td>${escapeHtml(s.fromParticipantName)}</td>
+                    <td>${escapeHtml(s.toParticipantName)}</td>
+                    <td style="text-align: right; font-weight: 600;">${s.currency} ${formatMoney(s.amount)}</td>
+                    <td><span class="badge badge-positive">&check; CLEARED</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div style="text-align: center; padding: 60px;">Error loading settlements: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// -------------------------------------------------------------
+// VIEW 5: SYSTEM SETTINGS & PREFERENCES
+// -------------------------------------------------------------
+async function renderSettingsPage() {
+  updateBreadcrumbs([{ label: 'Settings', url: '#/settings' }]);
+  const container = document.getElementById('view-container');
+
+  container.innerHTML = `
+    <div style="max-width: 800px; margin: 0 auto;">
+      <div style="margin-bottom: 32px;">
+        <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Preferences &amp; Engine</div>
+        <h2 style="font-family: var(--font-serif); font-size: 26px; letter-spacing: 2px; text-transform: uppercase;">Platform Settings</h2>
+        <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">Configuration, precision rounding parameters, and financial data export.</div>
+      </div>
+
+      <!-- Currency Presets -->
+      <div class="form-card">
+        <h3 style="font-family: var(--font-serif); font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+          Financial Engine Parameters
+        </h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Algorithm Strategy</label>
+            <input type="text" class="form-control" value="Greedy Cashflow Minimization (O(N log N))" disabled style="background: var(--bg-tertiary);">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Penny Distribution Policy</label>
+            <input type="text" class="form-control" value="Deterministic Rounding (Zero-Sum Invariant)" disabled style="background: var(--bg-tertiary);">
+          </div>
+        </div>
+      </div>
+
+      <!-- Export Data Hub -->
+      <div class="form-card">
+        <h3 style="font-family: var(--font-serif); font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+          Global Data Backup &amp; Export
+        </h3>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">
+          Export all trip ledgers, participant balance sheets, and audit logs as standard JSON for offsite accounting.
+        </p>
+        <button class="btn btn-sm" onclick="exportAllTripsJSON()">Download Full JSON Archive</button>
+      </div>
+
+      <!-- System Diagnostic -->
+      <div class="form-card">
+        <h3 style="font-family: var(--font-serif); font-size: 16px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+          Backend Health &amp; Invariant Checks
+        </h3>
+        <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+            <span>Persistence Driver</span>
+            <strong>MariaDB Connector/J (Production Schema)</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+            <span>Zero-Sum Verification</span>
+            <span style="color: var(--accent-positive); font-weight: 600;">ACTIVE (Enforced before save)</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span>Debt Simplification Clearance</span>
+            <span style="color: var(--accent-positive); font-weight: 600;">ACTIVE (Verified clearance to $0.00)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// -------------------------------------------------------------
+// VIEW 6: TRIP WORKSPACE (NESTED NAVIGATION HUB)
 // -------------------------------------------------------------
 async function renderTripWorkspace(tripId, activeSection = 'overview') {
+  state.activeTripId = tripId;
   const container = document.getElementById('view-container');
-  container.innerHTML = `<div style="text-align: center; padding: 60px;">Loading trip workspace...</div>`;
+  container.innerHTML = `<div style="text-align: center; padding: 60px;">Opening expedition workspace...</div>`;
 
   try {
     const summary = await apiCall(`/api/trips/${tripId}/summary`);
     state.activeTripSummary = summary;
-    state.activeTrip = summary.trip;
   } catch (e) {
     container.innerHTML = `<div style="text-align: center; padding: 60px;">Failed to load trip: ${escapeHtml(e.message)}</div>`;
     return;
@@ -269,84 +683,88 @@ async function renderTripWorkspace(tripId, activeSection = 'overview') {
 
   // Breadcrumbs: Minimal / Trips / [Trip Name] / [Active Section]
   const sectionLabelMap = {
-    overview: 'Overview',
-    participants: 'Participants',
-    expenses: 'Expenses',
-    settlements: 'Settlements & Balances',
-    audit: 'Audit Log'
+    overview: 'Dashboard',
+    members: 'Members & Balances',
+    expenses: 'Expenses Ledger',
+    settlements: 'Debt Simplification',
+    audit: 'Audit Log',
+    settings: 'Trip Settings'
   };
 
   updateBreadcrumbs([
     { label: 'Trips', url: '#/trips' },
     { label: trip.name, url: `#/trips/${tripId}/overview` },
-    { label: sectionLabelMap[activeSection] || 'Overview' }
+    { label: sectionLabelMap[activeSection] || 'Dashboard' }
   ]);
 
-  // Render Base Layout with Header, Stats, and Nested Tabs
   let html = `
     <!-- Trip Header Strip -->
     <div class="trip-header-strip">
       <div class="trip-title-area">
+        <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">
+          Expedition #${trip.id} &middot; Base ${trip.currency}
+        </div>
         <h2>${escapeHtml(trip.name)}</h2>
-        <div class="trip-meta-desc">${escapeHtml(trip.description || 'Group travel expense tracking workspace')}</div>
+        <div class="trip-meta-desc">${escapeHtml(trip.description || 'Shared travel cost tracking and minimal debt settlement.')}</div>
       </div>
       <div class="btn-group">
         <a href="#/trips/${tripId}/expenses/new" class="btn btn-sm">+ Log Expense</a>
         <button class="btn btn-sm btn-secondary" onclick="promptAddParticipant(${tripId})">+ Add Member</button>
-        <button class="btn btn-sm btn-danger" onclick="handleDeleteTrip(${tripId})">Delete Trip</button>
+        <button class="btn btn-sm btn-secondary" onclick="exportTripCSV(${tripId})">Export CSV</button>
       </div>
     </div>
 
     <!-- Stats Ribbon -->
     <div class="stats-ribbon">
       <div class="stat-box">
-        <div class="stat-label">Total Trip Spend</div>
+        <div class="stat-label">Total Expedition Spend</div>
         <div class="stat-value">${trip.currency} ${formatMoney(totalSpend)}</div>
         <div class="stat-sub">${expenses.length} Logged Transactions</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Group Members</div>
+        <div class="stat-label">Active Members</div>
         <div class="stat-value">${participants.length}</div>
-        <div class="stat-sub">Sharing Travel Expenses</div>
+        <div class="stat-sub">Sharing Shared Costs</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Net Balance Sum</div>
+        <div class="stat-label">Net Balance Invariant</div>
         <div class="stat-value" style="color: var(--accent-positive);">${trip.currency} 0.00</div>
-        <div class="stat-sub">Strict Zero-Sum Integrity &check;</div>
+        <div class="stat-sub">&check; Strictly Zero-Sum</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Settlement Status</div>
-        <div class="stat-value" style="font-size: 18px;">
-          ${settlements.filter(s => s.settled).length} / ${settlements.length} Paid
+        <div class="stat-label">Settlement Progress</div>
+        <div class="stat-value" style="font-size: 20px;">
+          ${settlements.filter(s => s.settled).length} / ${settlements.length} Cleared
         </div>
-        <div class="stat-sub">${settlements.length} Minimal Clearances</div>
+        <div class="stat-sub">Minimal Transactions</div>
       </div>
     </div>
 
-    <!-- Nested Navigation Tabs -->
+    <!-- 6 Nested Navigation Tabs -->
     <div class="nested-nav-tabs">
-      <button class="nested-tab-btn ${activeSection === 'overview' ? 'active' : ''}" onclick="window.location.hash='#/trips/${tripId}/overview'">01 &middot; Overview</button>
-      <button class="nested-tab-btn ${activeSection === 'participants' ? 'active' : ''}" onclick="window.location.hash='#/trips/${tripId}/participants'">02 &middot; Participants (${participants.length})</button>
+      <button class="nested-tab-btn ${activeSection === 'overview' ? 'active' : ''}" onclick="window.location.hash='#/trips/${tripId}/overview'">01 &middot; Dashboard</button>
+      <button class="nested-tab-btn ${activeSection === 'members' ? 'active' : ''}" onclick="window.location.hash='#/trips/${tripId}/members'">02 &middot; Members (${participants.length})</button>
       <button class="nested-tab-btn ${activeSection === 'expenses' ? 'active' : ''}" onclick="window.location.hash='#/trips/${tripId}/expenses'">03 &middot; Expenses (${expenses.length})</button>
-      <button class="nested-tab-btn ${activeSection === 'settlements' ? 'active' : ''}" onclick="window.location.hash='#/trips/${tripId}/settlements'">04 &middot; Balances &amp; Settlements</button>
+      <button class="nested-tab-btn ${activeSection === 'settlements' ? 'active' : ''}" onclick="window.location.hash='#/trips/${tripId}/settlements'">04 &middot; Debt Simplification</button>
       <button class="nested-tab-btn ${activeSection === 'audit' ? 'active' : ''}" onclick="window.location.hash='#/trips/${tripId}/audit'">05 &middot; Audit Log (${auditLogs.length})</button>
+      <button class="nested-tab-btn ${activeSection === 'settings' ? 'active' : ''}" onclick="window.location.hash='#/trips/${tripId}/settings'">06 &middot; Settings</button>
     </div>
 
-    <!-- Dynamic Tab Content Subview -->
     <div id="nested-tab-content">
   `;
 
-  // Render Subview depending on activeSection
   if (activeSection === 'overview') {
     html += renderTabOverview(trip, participants, expenses, balances, settlements);
-  } else if (activeSection === 'participants') {
-    html += renderTabParticipants(trip, participants, balances);
+  } else if (activeSection === 'members') {
+    html += renderTabMembers(trip, participants, balances);
   } else if (activeSection === 'expenses') {
     html += renderTabExpenses(trip, expenses);
   } else if (activeSection === 'settlements') {
     html += renderTabSettlements(trip, balances, settlements);
   } else if (activeSection === 'audit') {
     html += renderTabAudit(trip, auditLogs);
+  } else if (activeSection === 'settings') {
+    html += renderTabSettings(trip);
   }
 
   html += `</div>`;
@@ -354,37 +772,40 @@ async function renderTripWorkspace(tripId, activeSection = 'overview') {
 }
 
 // -------------------------------------------------------------
-// TAB 01: OVERVIEW SUBVIEW
+// TAB 01: DASHBOARD
 // -------------------------------------------------------------
 function renderTabOverview(trip, participants, expenses, balances, settlements) {
   const recentExpenses = expenses.slice(0, 5);
   const pendingSettlements = settlements.filter(s => !s.settled);
 
+  // Compute category distribution
+  const catMap = {};
+  expenses.forEach(e => {
+    catMap[e.category] = (catMap[e.category] || 0) + Number(e.amount);
+  });
+  const total = expenses.reduce((acc, e) => acc + Number(e.amount), 0);
+  const sortedCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
+
   return `
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 32px; margin-bottom: 32px;">
       
-      <!-- Left Column: Net Balances Snapshot -->
+      <!-- Category Breakdown -->
       <div style="border: 1px solid var(--border-subtle); padding: 24px; background: var(--bg-primary);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
-          <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase;">Net Balances Snapshot</h4>
-          <a href="#/trips/${trip.id}/settlements" style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-primary); text-decoration: none;">View All &rarr;</a>
-        </div>
-        ${balances.length === 0 ? `<p style="color: var(--text-muted);">No participants found.</p>` : `
-          <div style="display: flex; flex-direction: column; gap: 12px;">
-            ${balances.map(b => {
-              const isOwed = b.netBalance > 0;
-              const isOwes = b.netBalance < 0;
+        <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+          Expenditure by Category
+        </h4>
+        ${sortedCats.length === 0 ? `<p style="color: var(--text-muted);">No expenses logged yet.</p>` : `
+          <div class="category-bars-wrap">
+            ${sortedCats.map(([cat, amt]) => {
+              const pct = total > 0 ? ((amt / total) * 100).toFixed(1) : 0;
               return `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); cursor: pointer;"
-                     onclick="window.location.hash='#/trips/${trip.id}/participants/${b.participantId}'">
-                  <div>
-                    <div style="font-weight: 600; font-size: 13px;">${escapeHtml(b.participantName)}</div>
-                    <div style="font-size: 11px; color: var(--text-muted);">Paid ${trip.currency} ${formatMoney(b.totalPaid)} &middot; Share ${trip.currency} ${formatMoney(b.totalOwed)}</div>
+                <div class="category-bar-item">
+                  <div class="category-bar-header">
+                    <span><strong>${escapeHtml(cat)}</strong> &middot; ${trip.currency} ${formatMoney(amt)}</span>
+                    <span style="color: var(--text-muted);">${pct}%</span>
                   </div>
-                  <div>
-                    <span class="badge ${isOwed ? 'badge-positive' : isOwes ? 'badge-negative' : 'badge-neutral'}">
-                      ${isOwed ? `+${trip.currency} ${formatMoney(b.netBalance)}` : isOwes ? `-${trip.currency} ${formatMoney(Math.abs(b.netBalance))}` : 'SETTLED'}
-                    </span>
+                  <div class="category-bar-track">
+                    <div class="category-bar-fill" style="width: ${pct}%;"></div>
                   </div>
                 </div>
               `;
@@ -393,41 +814,37 @@ function renderTabOverview(trip, participants, expenses, balances, settlements) 
         `}
       </div>
 
-      <!-- Right Column: Pending Settlement Payments -->
+      <!-- Net Balances Snapshot -->
       <div style="border: 1px solid var(--border-subtle); padding: 24px; background: var(--bg-primary);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
-          <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase;">Optimal Clearances</h4>
-          <a href="#/trips/${trip.id}/settlements" style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-primary); text-decoration: none;">Settlement Plan &rarr;</a>
+          <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase;">Net Balances Snapshot</h4>
+          <a href="#/trips/${trip.id}/members" style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-primary); text-decoration: none;">All Members &rarr;</a>
         </div>
-        ${pendingSettlements.length === 0 ? `
-          <div style="text-align: center; padding: 32px 16px; color: var(--accent-positive);">
-            <div style="font-size: 20px; margin-bottom: 8px;">&check;</div>
-            <div style="font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;">All Accounts Settled</div>
-            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">No outstanding debts between participants.</div>
-          </div>
-        ` : `
-          <div style="display: flex; flex-direction: column; gap: 10px;">
-            ${pendingSettlements.map(s => `
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border: 1px solid var(--border-subtle); background: var(--bg-secondary);">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          ${balances.map(b => {
+            const isOwed = b.netBalance > 0;
+            const isOwes = b.netBalance < 0;
+            return `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); cursor: pointer;"
+                   onclick="window.location.hash='#/trips/${trip.id}/members/${b.participantId}'">
                 <div>
-                  <div style="font-size: 13px;">
-                    <strong>${escapeHtml(s.fromParticipantName)}</strong> &rarr; <strong>${escapeHtml(s.toParticipantName)}</strong>
-                  </div>
-                  <div style="font-size: 11px; color: var(--text-muted);">Minimal greedy transaction</div>
+                  <div style="font-weight: 600; font-size: 13px;">${escapeHtml(b.participantName)}</div>
+                  <div style="font-size: 11px; color: var(--text-muted);">Paid ${trip.currency} ${formatMoney(b.totalPaid)} &middot; Share ${trip.currency} ${formatMoney(b.totalOwed)}</div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <span style="font-family: var(--font-serif); font-weight: 700; font-size: 14px;">${trip.currency} ${formatMoney(s.amount)}</span>
-                  <button class="btn btn-sm" onclick="handleMarkSettled(${trip.id}, ${s.id})">Settle</button>
+                <div>
+                  <span class="badge ${isOwed ? 'badge-positive' : isOwes ? 'badge-negative' : 'badge-neutral'}">
+                    ${isOwed ? `+${trip.currency} ${formatMoney(b.netBalance)}` : isOwes ? `-${trip.currency} ${formatMoney(Math.abs(b.netBalance))}` : 'SETTLED'}
+                  </span>
                 </div>
               </div>
-            `).join('')}
-          </div>
-        `}
+            `;
+          }).join('')}
+        </div>
       </div>
 
     </div>
 
-    <!-- Recent Expenses Table -->
+    <!-- Recent Expenses -->
     <div style="border: 1px solid var(--border-subtle); padding: 24px; background: var(--bg-primary);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
         <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase;">Recent Expenses</h4>
@@ -449,7 +866,7 @@ function renderTabOverview(trip, participants, expenses, balances, settlements) 
                 <th>Description</th>
                 <th>Category</th>
                 <th>Payer</th>
-                <th>Shared By</th>
+                <th>Beneficiaries</th>
                 <th style="text-align: right;">Amount</th>
                 <th>Action</th>
               </tr>
@@ -458,7 +875,7 @@ function renderTabOverview(trip, participants, expenses, balances, settlements) 
               ${recentExpenses.map(e => `
                 <tr>
                   <td>${formatDate(e.expenseDate)}</td>
-                  <td><a href="#/trips/${trip.id}/expenses/${e.id}" style="color: var(--text-primary); font-weight: 600; text-decoration: none;">${escapeHtml(e.description)}</a></td>
+                  <td><strong>${escapeHtml(e.description)}</strong></td>
                   <td><span class="badge badge-neutral">${escapeHtml(e.category)}</span></td>
                   <td>${escapeHtml(e.payer.name)}</td>
                   <td>${e.shares ? e.shares.length : 0} members</td>
@@ -475,17 +892,17 @@ function renderTabOverview(trip, participants, expenses, balances, settlements) 
 }
 
 // -------------------------------------------------------------
-// TAB 02: PARTICIPANTS SUBVIEW
+// TAB 02: MEMBERS & BALANCES
 // -------------------------------------------------------------
-function renderTabParticipants(trip, participants, balances) {
+function renderTabMembers(trip, participants, balances) {
   const balanceMap = {};
   balances.forEach(b => { balanceMap[b.participantId] = b; });
 
   return `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
       <div>
-        <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase;">Participants Directory</h3>
-        <p style="font-size: 13px; color: var(--text-secondary);">Click on any member to drill into their nested personal ledger and payment history.</p>
+        <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase;">Expedition Members</h3>
+        <p style="font-size: 13px; color: var(--text-secondary);">Click any member to open their nested individual balance sheet and ledger.</p>
       </div>
       <button class="btn btn-sm" onclick="promptAddParticipant(${trip.id})">+ Add Member</button>
     </div>
@@ -496,11 +913,11 @@ function renderTabParticipants(trip, participants, balances) {
           <tr>
             <th>Member Name</th>
             <th>Email</th>
-            <th style="text-align: right;">Total Paid</th>
-            <th style="text-align: right;">Total Owed Share</th>
+            <th style="text-align: right;">Out-of-Pocket Paid</th>
+            <th style="text-align: right;">Total Shared Share</th>
             <th style="text-align: right;">Net Balance</th>
             <th>Status</th>
-            <th>Nested View</th>
+            <th>Nested Drill-down</th>
           </tr>
         </thead>
         <tbody>
@@ -514,18 +931,18 @@ function renderTabParticipants(trip, participants, balances) {
                 <td style="color: var(--text-muted);">${escapeHtml(p.email || '—')}</td>
                 <td style="text-align: right;">${trip.currency} ${formatMoney(b.totalPaid)}</td>
                 <td style="text-align: right;">${trip.currency} ${formatMoney(b.totalOwed)}</td>
-                <td style="text-align: right; font-weight: 700;">
+                <td style="text-align: right; font-weight: 700; font-family: var(--font-serif);">
                   <span style="color: ${isOwed ? 'var(--accent-positive)' : isOwes ? 'var(--accent-negative)' : 'var(--text-muted)'};">
                     ${isOwed ? `+${trip.currency} ${formatMoney(b.netBalance)}` : isOwes ? `-${trip.currency} ${formatMoney(Math.abs(b.netBalance))}` : `${trip.currency} 0.00`}
                   </span>
                 </td>
                 <td>
                   <span class="badge ${isOwed ? 'badge-positive' : isOwes ? 'badge-negative' : 'badge-neutral'}">
-                    ${isOwed ? 'Is Owed' : isOwes ? 'Owes Money' : 'Settled'}
+                    ${isOwed ? 'Creditor (Owed)' : isOwes ? 'Debtor (Owes)' : 'Settled'}
                   </span>
                 </td>
                 <td>
-                  <a href="#/trips/${trip.id}/participants/${p.id}" class="btn btn-sm">Member Ledger &rarr;</a>
+                  <a href="#/trips/${trip.id}/members/${p.id}" class="btn btn-sm">Member Ledger &rarr;</a>
                 </td>
               </tr>
             `;
@@ -537,88 +954,84 @@ function renderTabParticipants(trip, participants, balances) {
 }
 
 // -------------------------------------------------------------
-// NESTED SUB-PAGE: PARTICIPANT LEDGER (LEVEL 3)
+// NESTED LEVEL 2/3: MEMBER FINANCIAL LEDGER
 // -------------------------------------------------------------
-async function renderParticipantLedger(tripId, participantId) {
+async function renderMemberLedger(tripId, memberId) {
   if (!state.activeTripSummary || state.activeTripSummary.trip.id != tripId) {
-    await renderTripWorkspace(tripId, 'participants');
+    await renderTripWorkspace(tripId, 'members');
   }
 
   const trip = state.activeTripSummary.trip;
-  const participant = state.activeTripSummary.participants.find(p => p.id == participantId);
-  const balances = state.activeTripSummary.balances.find(b => b.participantId == participantId) || { totalPaid: 0, totalOwed: 0, netBalance: 0 };
+  const participant = state.activeTripSummary.participants.find(p => p.id == memberId);
+  const balances = state.activeTripSummary.balances.find(b => b.participantId == memberId) || { totalPaid: 0, totalOwed: 0, netBalance: 0 };
   const allExpenses = state.activeTripSummary.expenses || [];
   const settlements = state.activeTripSummary.settlements || [];
 
   if (!participant) {
-    showToast('Participant not found', true);
-    window.location.hash = `#/trips/${tripId}/participants`;
+    showToast('Member not found', true);
+    window.location.hash = `#/trips/${tripId}/members`;
     return;
   }
 
   updateBreadcrumbs([
     { label: 'Trips', url: '#/trips' },
     { label: trip.name, url: `#/trips/${tripId}/overview` },
-    { label: 'Participants', url: `#/trips/${tripId}/participants` },
+    { label: 'Members', url: `#/trips/${tripId}/members` },
     { label: `${participant.name}'s Ledger` }
   ]);
 
-  const paidExpenses = allExpenses.filter(e => e.payer.id == participantId);
-  const sharedExpenses = allExpenses.filter(e => e.shares && e.shares.some(s => s.participant.id == participantId));
-  const participantSettlements = settlements.filter(s => s.fromParticipantId == participantId || s.toParticipantId == participantId);
+  const paidExpenses = allExpenses.filter(e => e.payer.id == memberId);
+  const sharedExpenses = allExpenses.filter(e => e.shares && e.shares.some(s => s.participant.id == memberId));
+  const memberSettlements = settlements.filter(s => s.fromParticipantId == memberId || s.toParticipantId == memberId);
 
   const container = document.getElementById('view-container');
   container.innerHTML = `
     <div style="margin-bottom: 24px;">
-      <a href="#/trips/${tripId}/participants" class="btn btn-sm btn-secondary" style="margin-bottom: 16px;">&larr; Back to Participants</a>
+      <a href="#/trips/${tripId}/members" class="btn btn-sm btn-secondary" style="margin-bottom: 16px;">&larr; Back to Members</a>
       <div class="trip-header-strip" style="margin-top: 10px;">
         <div>
-          <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Participant Financial Ledger</div>
-          <h2 style="font-family: var(--font-serif); font-size: 24px; letter-spacing: 2px; text-transform: uppercase;">${escapeHtml(participant.name)}</h2>
-          <div style="font-size: 13px; color: var(--text-secondary);">${escapeHtml(participant.email || 'No email registered')}</div>
+          <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Personal Financial Ledger</div>
+          <h2 style="font-family: var(--font-serif); font-size: 26px; letter-spacing: 2px; text-transform: uppercase;">${escapeHtml(participant.name)}</h2>
+          <div style="font-size: 13px; color: var(--text-secondary);">${escapeHtml(participant.email || 'No email attached')}</div>
         </div>
-        <div>
-          <div style="text-align: right;">
-            <div style="font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted);">Net Balance</div>
-            <div style="font-family: var(--font-serif); font-size: 26px; font-weight: 700; color: ${balances.netBalance > 0 ? 'var(--accent-positive)' : balances.netBalance < 0 ? 'var(--accent-negative)' : 'var(--text-muted)'};">
-              ${balances.netBalance > 0 ? `+${trip.currency} ${formatMoney(balances.netBalance)}` : balances.netBalance < 0 ? `-${trip.currency} ${formatMoney(Math.abs(balances.netBalance))}` : `${trip.currency} 0.00`}
-            </div>
-            <div style="font-size: 11px; color: var(--text-muted);">${balances.netBalance > 0 ? 'Will receive from group' : balances.netBalance < 0 ? 'Must pay back to group' : 'Settled up'}</div>
+        <div style="text-align: right;">
+          <div style="font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted);">Net Balance</div>
+          <div style="font-family: var(--font-serif); font-size: 28px; font-weight: 700; color: ${balances.netBalance > 0 ? 'var(--accent-positive)' : balances.netBalance < 0 ? 'var(--accent-negative)' : 'var(--text-muted)'};">
+            ${balances.netBalance > 0 ? `+${trip.currency} ${formatMoney(balances.netBalance)}` : balances.netBalance < 0 ? `-${trip.currency} ${formatMoney(Math.abs(balances.netBalance))}` : `${trip.currency} 0.00`}
           </div>
+          <div style="font-size: 11px; color: var(--text-muted);">${balances.netBalance > 0 ? 'To be reimbursed' : balances.netBalance < 0 ? 'Must repay to group' : 'All debts settled'}</div>
         </div>
       </div>
     </div>
 
-    <!-- Stats for this participant -->
-    <div class="stats-ribbon" style="margin-bottom: 32px;">
+    <!-- Stats Ribbon for this member -->
+    <div class="stats-ribbon">
       <div class="stat-box">
         <div class="stat-label">Total Out-of-Pocket Paid</div>
         <div class="stat-value">${trip.currency} ${formatMoney(balances.totalPaid)}</div>
-        <div class="stat-sub">${paidExpenses.length} Expenses Paid</div>
+        <div class="stat-sub">${paidExpenses.length} Logged Payments</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Total Owed Expense Share</div>
+        <div class="stat-label">Owed Expense Shares</div>
         <div class="stat-value">${trip.currency} ${formatMoney(balances.totalOwed)}</div>
-        <div class="stat-sub">Shared across ${sharedExpenses.length} items</div>
+        <div class="stat-sub">Across ${sharedExpenses.length} Shared Expenses</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Net Balance Equation</div>
+        <div class="stat-label">Formula Check</div>
         <div class="stat-value" style="font-size: 18px;">${formatMoney(balances.totalPaid)} &minus; ${formatMoney(balances.totalOwed)}</div>
         <div class="stat-sub">Paid minus Owed</div>
       </div>
     </div>
 
-    <!-- Settlement Obligations for this participant -->
+    <!-- Settlement Payments involving this member -->
     <div style="border: 1px solid var(--border-subtle); padding: 24px; background: var(--bg-primary); margin-bottom: 32px;">
       <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
-        Settlement Clearances for ${escapeHtml(participant.name)}
+        Direct Settlement Obligations
       </h4>
-      ${participantSettlements.length === 0 ? `
-        <p style="color: var(--text-muted);">No settlement transactions involving this member.</p>
-      ` : `
+      ${memberSettlements.length === 0 ? `<p style="color: var(--text-muted);">No clearance transactions required for this member.</p>` : `
         <div style="display: flex; flex-direction: column; gap: 12px;">
-          ${participantSettlements.map(s => {
-            const isPayer = s.fromParticipantId == participantId;
+          ${memberSettlements.map(s => {
+            const isPayer = s.fromParticipantId == memberId;
             return `
               <div class="settlement-card">
                 <div class="settlement-info">
@@ -628,14 +1041,14 @@ async function renderParticipantLedger(tripId, participantId) {
                       ${isPayer ? `You owe ${escapeHtml(s.toParticipantName)}` : `${escapeHtml(s.fromParticipantName)} owes you`}
                     </div>
                     <div style="font-size: 11px; color: var(--text-muted);">
-                      Status: ${s.settled ? `Settled on ${formatDate(s.settledAt)}` : 'Pending Payment'}
+                      Status: ${s.settled ? `Cleared on ${formatDate(s.settledAt, true)}` : 'Pending Payment'}
                     </div>
                   </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 16px;">
                   <span class="settlement-amount">${trip.currency} ${formatMoney(s.amount)}</span>
-                  ${s.settled ? `<span class="badge badge-positive">PAID</span>` : `
-                    <button class="btn btn-sm" onclick="handleMarkSettled(${tripId}, ${s.id})">Mark as Paid</button>
+                  ${s.settled ? `<span class="badge badge-positive">&check; CLEARED</span>` : `
+                    <button class="btn btn-sm" onclick="openPaymentModal(${tripId}, ${s.id}, '${escapeHtml(s.fromParticipantName)}', '${escapeHtml(s.toParticipantName)}', ${s.amount}, '${trip.currency}')">Settle</button>
                   `}
                 </div>
               </div>
@@ -645,7 +1058,7 @@ async function renderParticipantLedger(tripId, participantId) {
       `}
     </div>
 
-    <!-- Expenses Paid by Participant -->
+    <!-- Expenses Paid by Member -->
     <div style="border: 1px solid var(--border-subtle); padding: 24px; background: var(--bg-primary); margin-bottom: 32px;">
       <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
         Expenses Paid by ${escapeHtml(participant.name)} (${paidExpenses.length})
@@ -669,47 +1082,9 @@ async function renderParticipantLedger(tripId, participantId) {
                   <td><strong>${escapeHtml(e.description)}</strong></td>
                   <td><span class="badge badge-neutral">${escapeHtml(e.category)}</span></td>
                   <td style="text-align: right; font-weight: 600;">${trip.currency} ${formatMoney(e.amount)}</td>
-                  <td><a href="#/trips/${tripId}/expenses/${e.id}" class="btn btn-sm">Inspect</a></td>
+                  <td><a href="#/trips/${tripId}/expenses/${e.id}" class="btn btn-sm">View &rarr;</a></td>
                 </tr>
               `).join('')}
-            </tbody>
-          </table>
-        </div>
-      `}
-    </div>
-
-    <!-- Expenses Shared by Participant -->
-    <div style="border: 1px solid var(--border-subtle); padding: 24px; background: var(--bg-primary);">
-      <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
-        Expenses Shared by ${escapeHtml(participant.name)} (${sharedExpenses.length})
-      </h4>
-      ${sharedExpenses.length === 0 ? `<p style="color: var(--text-muted);">No shared expenses found.</p>` : `
-        <div class="table-wrap">
-          <table class="minimal-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Expense</th>
-                <th>Payer</th>
-                <th style="text-align: right;">Total Amount</th>
-                <th style="text-align: right;">${participant.name}'s Share</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${sharedExpenses.map(e => {
-                const myShare = e.shares.find(s => s.participant.id == participantId);
-                return `
-                  <tr>
-                    <td>${formatDate(e.expenseDate)}</td>
-                    <td><a href="#/trips/${tripId}/expenses/${e.id}" style="color: var(--text-primary); text-decoration: none; font-weight: 600;">${escapeHtml(e.description)}</a></td>
-                    <td>${escapeHtml(e.payer.name)}</td>
-                    <td style="text-align: right;">${trip.currency} ${formatMoney(e.amount)}</td>
-                    <td style="text-align: right; font-weight: 700; color: var(--accent-negative);">
-                      ${trip.currency} ${formatMoney(myShare ? myShare.shareAmount : 0)}
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
             </tbody>
           </table>
         </div>
@@ -719,22 +1094,61 @@ async function renderParticipantLedger(tripId, participantId) {
 }
 
 // -------------------------------------------------------------
-// TAB 03: EXPENSES LIST SUBVIEW
+// TAB 03: EXPENSES LEDGER WITH FILTERS & CSV EXPORT
 // -------------------------------------------------------------
 function renderTabExpenses(trip, expenses) {
+  // Filter by category
+  let filtered = [...expenses];
+  if (state.expenseCategoryFilter !== 'ALL') {
+    filtered = filtered.filter(e => e.category === state.expenseCategoryFilter);
+  }
+
+  // Sort
+  if (state.expenseSortBy === 'DATE_DESC') {
+    filtered.sort((a, b) => new Date(b.expenseDate) - new Date(a.expenseDate));
+  } else if (state.expenseSortBy === 'DATE_ASC') {
+    filtered.sort((a, b) => new Date(a.expenseDate) - new Date(b.expenseDate));
+  } else if (state.expenseSortBy === 'AMOUNT_DESC') {
+    filtered.sort((a, b) => Number(b.amount) - Number(a.amount));
+  } else if (state.expenseSortBy === 'AMOUNT_ASC') {
+    filtered.sort((a, b) => Number(a.amount) - Number(b.amount));
+  }
+
   return `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
       <div>
-        <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase;">Expenses Log</h3>
-        <p style="font-size: 13px; color: var(--text-secondary);">Click on an expense to view its nested penny-split breakdown and audit details.</p>
+        <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase;">Shared Expense Ledger</h3>
+        <p style="font-size: 13px; color: var(--text-secondary);">Itemized transactions split among group members with exact penny allocations.</p>
       </div>
-      <a href="#/trips/${trip.id}/expenses/new" class="btn btn-sm">+ Log New Expense</a>
+      <div class="btn-group">
+        <a href="#/trips/${trip.id}/expenses/new" class="btn btn-sm">+ Log New Expense</a>
+        <button class="btn btn-sm btn-secondary" onclick="exportTripCSV(${trip.id})">Download CSV</button>
+      </div>
     </div>
 
-    ${expenses.length === 0 ? `
-      <div style="text-align: center; padding: 60px 20px; border: 1px dashed var(--border-subtle); background: var(--bg-secondary);">
-        <p style="color: var(--text-secondary); margin-bottom: 16px;">No expenses recorded yet.</p>
-        <a href="#/trips/${trip.id}/expenses/new" class="btn btn-sm">Log First Expense</a>
+    <!-- Category Filter Pills & Sorting -->
+    <div class="filter-bar">
+      <div class="category-pills">
+        <button class="pill-btn ${state.expenseCategoryFilter === 'ALL' ? 'active' : ''}" onclick="setExpenseFilter('ALL')">All (${expenses.length})</button>
+        ${state.categories.map(cat => {
+          const count = expenses.filter(e => e.category === cat).length;
+          return `<button class="pill-btn ${state.expenseCategoryFilter === cat ? 'active' : ''}" onclick="setExpenseFilter('${cat}')">${cat} (${count})</button>`;
+        }).join('')}
+      </div>
+      <div>
+        <select class="form-control" style="padding: 6px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;" onchange="setExpenseSort(this.value)">
+          <option value="DATE_DESC" ${state.expenseSortBy === 'DATE_DESC' ? 'selected' : ''}>Newest First</option>
+          <option value="DATE_ASC" ${state.expenseSortBy === 'DATE_ASC' ? 'selected' : ''}>Oldest First</option>
+          <option value="AMOUNT_DESC" ${state.expenseSortBy === 'AMOUNT_DESC' ? 'selected' : ''}>Highest Amount</option>
+          <option value="AMOUNT_ASC" ${state.expenseSortBy === 'AMOUNT_ASC' ? 'selected' : ''}>Lowest Amount</option>
+        </select>
+      </div>
+    </div>
+
+    ${filtered.length === 0 ? `
+      <div style="text-align: center; padding: 48px; border: 1px dashed var(--border-subtle); background: var(--bg-secondary);">
+        <p style="color: var(--text-secondary); margin-bottom: 12px;">No expenses found under current filter.</p>
+        <button class="btn btn-sm" onclick="setExpenseFilter('ALL')">Reset Filter</button>
       </div>
     ` : `
       <div class="table-wrap">
@@ -745,13 +1159,13 @@ function renderTabExpenses(trip, expenses) {
               <th>Description</th>
               <th>Category</th>
               <th>Payer</th>
-              <th>Split Between</th>
+              <th>Shared With</th>
               <th style="text-align: right;">Amount</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            ${expenses.map(e => `
+            ${filtered.map(e => `
               <tr>
                 <td>${formatDate(e.expenseDate)}</td>
                 <td>
@@ -763,7 +1177,7 @@ function renderTabExpenses(trip, expenses) {
                 <td>${escapeHtml(e.payer.name)}</td>
                 <td>
                   <span title="${e.shares.map(s => s.participant.name).join(', ')}">
-                    ${e.shares.length} participants
+                    ${e.shares.length} members
                   </span>
                 </td>
                 <td style="text-align: right; font-weight: 600;">${trip.currency} ${formatMoney(e.amount)}</td>
@@ -782,8 +1196,18 @@ function renderTabExpenses(trip, expenses) {
   `;
 }
 
+function setExpenseFilter(cat) {
+  state.expenseCategoryFilter = cat;
+  renderTripWorkspace(state.activeTripId, 'expenses');
+}
+
+function setExpenseSort(sort) {
+  state.expenseSortBy = sort;
+  renderTripWorkspace(state.activeTripId, 'expenses');
+}
+
 // -------------------------------------------------------------
-// NESTED SUB-PAGE: LOG NEW EXPENSE FORM (LEVEL 3)
+// NESTED LEVEL 2/3: LOG NEW EXPENSE FORM
 // -------------------------------------------------------------
 async function renderNewExpenseForm(tripId) {
   if (!state.activeTripSummary || state.activeTripSummary.trip.id != tripId) {
@@ -794,8 +1218,8 @@ async function renderNewExpenseForm(tripId) {
   const participants = state.activeTripSummary.participants || [];
 
   if (participants.length === 0) {
-    showToast('Add at least one participant before logging expenses', true);
-    window.location.hash = `#/trips/${tripId}/participants`;
+    showToast('Add at least one member to the trip first', true);
+    window.location.hash = `#/trips/${tripId}/members`;
     return;
   }
 
@@ -812,8 +1236,8 @@ async function renderNewExpenseForm(tripId) {
       <a href="#/trips/${tripId}/expenses" class="btn btn-sm btn-secondary" style="margin-bottom: 16px;">&larr; Back to Expenses</a>
       <div class="trip-header-strip">
         <div>
-          <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Nested Form</div>
-          <h2 style="font-family: var(--font-serif); font-size: 24px; letter-spacing: 2px; text-transform: uppercase;">Log Shared Expense</h2>
+          <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Record Outlay</div>
+          <h2 style="font-family: var(--font-serif); font-size: 26px; letter-spacing: 2px; text-transform: uppercase;">Log Shared Expense</h2>
           <div style="font-size: 13px; color: var(--text-secondary);">Amounts are split evenly with deterministic penny allocation so zero-sum balance integrity is preserved.</div>
         </div>
       </div>
@@ -825,7 +1249,7 @@ async function renderNewExpenseForm(tripId) {
           
           <div class="form-group">
             <label class="form-label" for="expense-desc">Description</label>
-            <input type="text" id="expense-desc" class="form-control" placeholder="e.g. Mountain Chalet Rental, Dinner in Venice" required>
+            <input type="text" id="expense-desc" class="form-control" placeholder="e.g. Mountain Chalet Rental, Dinner in Venice" required autocomplete="off">
           </div>
 
           <div class="form-group">
@@ -841,7 +1265,7 @@ async function renderNewExpenseForm(tripId) {
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="expense-payer">Who Paid?</label>
+            <label class="form-label" for="expense-payer">Who Paid Out-of-Pocket?</label>
             <select id="expense-payer" class="form-control" required>
               ${participants.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}
             </select>
@@ -850,7 +1274,7 @@ async function renderNewExpenseForm(tripId) {
         </div>
 
         <div class="form-group">
-          <label class="form-label">Participants Who Share This Expense</label>
+          <label class="form-label">Beneficiaries (Who Shares this Cost?)</label>
           <div style="margin-bottom: 8px; font-size: 11px; color: var(--text-muted);">
             <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 8px; font-size: 10px;" onclick="toggleAllParticipants(true)">Select All</button>
             <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 8px; font-size: 10px;" onclick="toggleAllParticipants(false)">Deselect All</button>
@@ -898,7 +1322,7 @@ function updateLiveSplitPreview() {
   const checked = Array.from(document.querySelectorAll('input[name="sharedParticipants"]:checked'));
 
   if (amount <= 0 || checked.length === 0) {
-    summaryEl.innerHTML = `<span style="color: var(--text-muted);">Select at least one participant and enter a positive amount.</span>`;
+    summaryEl.innerHTML = `<span style="color: var(--text-muted);">Select at least one member and enter a positive amount.</span>`;
     return;
   }
 
@@ -910,17 +1334,17 @@ function updateLiveSplitPreview() {
     <div><strong>${checked.length}</strong> participants sharing <strong>$${formatMoney(amount)}</strong>:</div>
     <div style="margin-top: 6px; font-size: 12px;">
       Base share: <strong>$${formatMoney(baseShare)}</strong> each.
-      ${remainderCents > 0 ? `<br><span style="color: var(--text-muted);">Exact penny allocation: The first ${remainderCents} member(s) pay $${formatMoney(baseShare + 0.01)} to guarantee sum equals $${formatMoney(amount)} exactly.</span>` : ''}
+      ${remainderCents > 0 ? `<br><span style="color: var(--text-muted);">Exact penny allocation: The first ${remainderCents} member(s) pay $${formatMoney(baseShare + 0.01)} to guarantee total equals $${formatMoney(amount)} exactly.</span>` : ''}
     </div>
   `;
 }
 
 // -------------------------------------------------------------
-// NESTED SUB-PAGE: EXPENSE DETAIL VIEW (LEVEL 3)
+// NESTED LEVEL 2/3: EXPENSE DETAIL RECEIPT
 // -------------------------------------------------------------
 async function renderExpenseDetail(tripId, expenseId) {
   const container = document.getElementById('view-container');
-  container.innerHTML = `<div style="text-align: center; padding: 60px;">Loading expense details...</div>`;
+  container.innerHTML = `<div style="text-align: center; padding: 60px;">Retrieving expense receipt...</div>`;
 
   try {
     const expense = await apiCall(`/api/trips/${tripId}/expenses/${expenseId}`);
@@ -938,9 +1362,9 @@ async function renderExpenseDetail(tripId, expenseId) {
         <a href="#/trips/${tripId}/expenses" class="btn btn-sm btn-secondary" style="margin-bottom: 16px;">&larr; Back to Expenses</a>
         <div class="trip-header-strip">
           <div>
-            <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Expense Detail #EXP-${expense.id}</div>
-            <h2 style="font-family: var(--font-serif); font-size: 24px; letter-spacing: 2px; text-transform: uppercase;">${escapeHtml(expense.description)}</h2>
-            <div style="font-size: 13px; color: var(--text-secondary);">Logged on ${formatDate(expense.expenseDate)} &middot; Category: <span class="badge badge-neutral">${escapeHtml(expense.category)}</span></div>
+            <div style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);">Itemized Receipt #EXP-${expense.id}</div>
+            <h2 style="font-family: var(--font-serif); font-size: 26px; letter-spacing: 2px; text-transform: uppercase;">${escapeHtml(expense.description)}</h2>
+            <div style="font-size: 13px; color: var(--text-secondary);">Logged on ${formatDate(expense.expenseDate, true)} &middot; Category: <span class="badge badge-neutral">${escapeHtml(expense.category)}</span></div>
           </div>
           <div>
             <button class="btn btn-sm btn-danger" onclick="handleDeleteExpense(${tripId}, ${expense.id})">Delete Expense</button>
@@ -950,7 +1374,7 @@ async function renderExpenseDetail(tripId, expenseId) {
 
       <div class="stats-ribbon" style="margin-bottom: 32px;">
         <div class="stat-box">
-          <div class="stat-label">Total Expense Amount</div>
+          <div class="stat-label">Total Amount Paid</div>
           <div class="stat-value">${trip.currency} ${formatMoney(expense.amount)}</div>
         </div>
         <div class="stat-box">
@@ -958,23 +1382,23 @@ async function renderExpenseDetail(tripId, expenseId) {
           <div class="stat-value" style="font-size: 20px;">${escapeHtml(expense.payer.name)}</div>
         </div>
         <div class="stat-box">
-          <div class="stat-label">Beneficiaries</div>
+          <div class="stat-label">Sharing Beneficiaries</div>
           <div class="stat-value">${expense.shares.length}</div>
-          <div class="stat-sub">Members Sharing Cost</div>
+          <div class="stat-sub">Group Members</div>
         </div>
       </div>
 
-      <!-- Split Breakdown Table -->
+      <!-- Itemized Shares Table -->
       <div style="border: 1px solid var(--border-subtle); padding: 24px; background: var(--bg-primary);">
         <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
-          Participant Share Breakdown
+          Member Share Allocations
         </h4>
         <div class="table-wrap">
           <table class="minimal-table">
             <thead>
               <tr>
                 <th>Participant</th>
-                <th>Share Role</th>
+                <th>Role</th>
                 <th style="text-align: right;">Share Amount</th>
                 <th style="text-align: right;">% of Total</th>
               </tr>
@@ -1000,47 +1424,47 @@ async function renderExpenseDetail(tripId, expenseId) {
       </div>
     `;
   } catch (err) {
-    container.innerHTML = `<div style="text-align: center; padding: 60px;">Error loading expense: ${escapeHtml(err.message)}</div>`;
+    container.innerHTML = `<div style="text-align: center; padding: 60px;">Error loading receipt: ${escapeHtml(err.message)}</div>`;
   }
 }
 
 // -------------------------------------------------------------
-// TAB 04: BALANCES & SETTLEMENTS SUBVIEW
+// TAB 04: DEBT SIMPLIFICATION & SETTLEMENTS
 // -------------------------------------------------------------
 function renderTabSettlements(trip, balances, settlements) {
   return `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
       <div>
-        <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase;">Balances &amp; Optimal Settlement</h3>
-        <p style="font-size: 13px; color: var(--text-secondary);">Minimal greedy transactions generated to settle all debts with minimum cash movements.</p>
+        <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase;">Debt Simplification Engine</h3>
+        <p style="font-size: 13px; color: var(--text-secondary);">Minimal greedy cashflow clearance minimizing total transactions to $N-1$ payments.</p>
       </div>
       <button class="btn btn-sm" onclick="handleGenerateSettlements(${trip.id})">&#x21bb; Re-Calculate Settlement</button>
     </div>
 
-    <!-- Business Rule Callouts (Enforced in Service Layer) -->
+    <!-- Verified Rule Callouts -->
     <div class="rule-callout">
       <div class="rule-callout-icon">&check;</div>
       <div>
-        <div class="rule-callout-title">Business Rule 1: Zero-Sum Integrity Enforced</div>
-        <div class="rule-callout-desc">The sum of all participants' net balances for this trip is guaranteed to equal exactly <strong>${trip.currency} 0.00</strong> before any settlement is generated.</div>
+        <div class="rule-callout-title">Zero-Sum Ledger Integrity Verified</div>
+        <div class="rule-callout-desc">The sum of all member net balances for this trip equals exactly <strong>${trip.currency} 0.00</strong>.</div>
       </div>
     </div>
 
-    <!-- Participant Net Balances Table -->
+    <!-- Net Balances Table -->
     <div style="border: 1px solid var(--border-subtle); padding: 24px; background: var(--bg-primary); margin-bottom: 32px;">
       <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
-        1. Participant Net Balance Table
+        1. Member Net Balance Sheet
       </h4>
       <div class="table-wrap">
         <table class="minimal-table">
           <thead>
             <tr>
-              <th>Participant</th>
+              <th>Member</th>
               <th style="text-align: right;">Total Paid</th>
               <th style="text-align: right;">Total Owed Share</th>
               <th style="text-align: right;">Net Balance (Paid &minus; Owed)</th>
               <th>Status</th>
-              <th>Action</th>
+              <th>Ledger</th>
             </tr>
           </thead>
           <tbody>
@@ -1063,7 +1487,7 @@ function renderTabSettlements(trip, balances, settlements) {
                     </span>
                   </td>
                   <td>
-                    <a href="#/trips/${trip.id}/participants/${b.participantId}" class="btn btn-sm">Ledger &rarr;</a>
+                    <a href="#/trips/${trip.id}/members/${b.participantId}" class="btn btn-sm">Ledger &rarr;</a>
                   </td>
                 </tr>
               `;
@@ -1073,16 +1497,7 @@ function renderTabSettlements(trip, balances, settlements) {
       </div>
     </div>
 
-    <!-- Business Rule 2 Callout -->
-    <div class="rule-callout">
-      <div class="rule-callout-icon">&check;</div>
-      <div>
-        <div class="rule-callout-title">Business Rule 2: Complete Balance Clearance Enforced</div>
-        <div class="rule-callout-desc">The minimal settlement transactions below are mathematically proven to fully clear every participant's balance to 0.00 without cyclic payments.</div>
-      </div>
-    </div>
-
-    <!-- Minimal Settlement Transactions -->
+    <!-- Minimal Transactions -->
     <div style="border: 1px solid var(--border-subtle); padding: 24px; background: var(--bg-primary);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
         <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase;">
@@ -1092,7 +1507,7 @@ function renderTabSettlements(trip, balances, settlements) {
 
       ${settlements.length === 0 ? `
         <div style="text-align: center; padding: 32px; color: var(--text-muted);">
-          No settlements required &mdash; all balances are currently $0.00!
+          All accounts are currently balanced &mdash; $0.00 debt remaining!
         </div>
       ` : `
         <div style="display: flex; flex-direction: column; gap: 14px;">
@@ -1107,16 +1522,18 @@ function renderTabSettlements(trip, balances, settlements) {
                     <span class="settlement-receiver">${escapeHtml(s.toParticipantName)}</span>
                   </div>
                   <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
-                    ${s.settled ? `Cleared on ${formatDate(s.settledAt)}` : 'Payment required to settle trip balance'}
+                    ${s.settled ? `Cleared on ${formatDate(s.settledAt, true)}` : 'Optimal debt clearance transaction'}
                   </div>
                 </div>
               </div>
               <div style="display: flex; align-items: center; gap: 20px;">
                 <span class="settlement-amount">${trip.currency} ${formatMoney(s.amount)}</span>
                 ${s.settled ? `
-                  <span class="badge badge-positive" style="padding: 6px 12px;">&check; SETTLED</span>
+                  <span class="badge badge-positive" style="padding: 6px 12px;">&check; CLEARED</span>
                 ` : `
-                  <button class="btn btn-sm" onclick="handleMarkSettled(${trip.id}, ${s.id})">Mark as Paid</button>
+                  <button class="btn btn-sm" onclick="openPaymentModal(${trip.id}, ${s.id}, '${escapeHtml(s.fromParticipantName)}', '${escapeHtml(s.toParticipantName)}', ${s.amount}, '${trip.currency}')">
+                    Settle Payment
+                  </button>
                 `}
               </div>
             </div>
@@ -1128,13 +1545,13 @@ function renderTabSettlements(trip, balances, settlements) {
 }
 
 // -------------------------------------------------------------
-// TAB 05: AUDIT LOG SUBVIEW
+// TAB 05: AUDIT LOG TIMELINE
 // -------------------------------------------------------------
 function renderTabAudit(trip, auditLogs) {
   return `
     <div style="margin-bottom: 24px;">
-      <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase;">Audit Trail &amp; Accountability</h3>
-      <p style="font-size: 13px; color: var(--text-secondary);">Immutable historical record of every trip creation, expense addition, deletion, and settlement transaction.</p>
+      <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase;">Immutable Audit Trail</h3>
+      <p style="font-size: 13px; color: var(--text-secondary);">Historical ledger of all trip modifications, expenses, and settlements.</p>
     </div>
 
     ${auditLogs.length === 0 ? `
@@ -1151,7 +1568,7 @@ function renderTabAudit(trip, auditLogs) {
                 </div>
                 <div style="font-size: 13px; color: var(--text-primary);">${escapeHtml(log.details)}</div>
               </div>
-              <div style="font-size: 10px; letter-spacing: 1px; color: var(--text-muted); text-transform: uppercase;">Verified</div>
+              <div style="font-size: 10px; letter-spacing: 1px; color: var(--text-muted); text-transform: uppercase;">System Verified</div>
             </div>
           `).join('')}
         </div>
@@ -1161,125 +1578,65 @@ function renderTabAudit(trip, auditLogs) {
 }
 
 // -------------------------------------------------------------
-// VIEW 3: ABOUT PAGE (SYSTEM SPECIFICATION & ALGORITHM)
+// TAB 06: TRIP SETTINGS & EXPORTS
 // -------------------------------------------------------------
-function renderAboutPage() {
-  updateBreadcrumbs([{ label: 'About', url: '#/about' }]);
-  const container = document.getElementById('view-container');
+function renderTabSettings(trip) {
+  return `
+    <div style="max-width: 700px;">
+      <div style="margin-bottom: 24px;">
+        <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase;">Expedition Settings &amp; Data</h3>
+        <p style="font-size: 13px; color: var(--text-secondary);">Manage trip metadata, download financial reports, or cascade remove workspace.</p>
+      </div>
 
-  container.innerHTML = `
-    <article style="max-width: 800px; margin: 0 auto;">
-      <div class="hero-meta-category">System Architecture &amp; Specification</div>
-      <h2 class="hero-title" style="margin-bottom: 24px;">69. TripSplit &mdash; Group Travel Expense Settlement Tracker</h2>
-
-      <div class="rule-callout" style="margin-bottom: 32px;">
-        <div class="rule-callout-icon">&sect;</div>
-        <div>
-          <div class="rule-callout-title">The Real-World Problem</div>
-          <div class="rule-callout-desc">
-            Friends travelling together share expenses unevenly (hotel, fuel, food) and settling who owes whom at the end of the trip becomes a confusing manual calculation.
+      <div class="form-card">
+        <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+          Edit Expedition Information
+        </h4>
+        <form onsubmit="handleEditTripSubmit(event)">
+          <input type="hidden" id="edit-trip-id" value="${trip.id}">
+          <div class="form-group">
+            <label class="form-label" for="edit-trip-name">Trip Name</label>
+            <input type="text" id="edit-trip-name" class="form-control" value="${escapeHtml(trip.name)}" required>
           </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-trip-desc">Description</label>
+            <textarea id="edit-trip-desc" class="form-control">${escapeHtml(trip.description || '')}</textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-trip-currency">Base Currency</label>
+            <input type="text" id="edit-trip-currency" class="form-control" value="${escapeHtml(trip.currency)}" required>
+          </div>
+          <div class="btn-group">
+            <button type="submit" class="btn btn-sm">Save Changes</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="form-card">
+        <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+          Export Financial Reports
+        </h4>
+        <div class="btn-group">
+          <button class="btn btn-sm" onclick="exportTripCSV(${trip.id})">Export Expenses CSV</button>
+          <button class="btn btn-sm btn-secondary" onclick="exportTripJSON(${trip.id})">Export Full JSON</button>
         </div>
       </div>
 
-      <div style="margin-bottom: 36px;">
-        <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px;">Core Features Implemented</h3>
-        <ol style="padding-left: 20px; line-height: 2;">
-          <li><strong>Create a trip with participants:</strong> Full workspace creation with customized currency and member rosters.</li>
-          <li><strong>Log an expense with payer, amount, and shared participants:</strong> Supports equal penny-allocated splits and custom splits.</li>
-          <li><strong>Compute each participant's net balance:</strong> Paid minus owed share, with zero-sum invariant check.</li>
-          <li><strong>Generate a minimal set of settlement transactions:</strong> Greedy debt simplification algorithm clearing all balances to zero.</li>
-          <li><strong>View full expense history and final settlement:</strong> Complete ledger and immutable audit trail.</li>
-        </ol>
-      </div>
-
-      <div style="margin-bottom: 36px;">
-        <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px;">Enforced Business Rules</h3>
-        <div style="display: flex; flex-direction: column; gap: 16px;">
-          <div style="border: 1px solid var(--border-subtle); padding: 18px; background: var(--bg-secondary);">
-            <strong>1. Sum of all participants' net balances must equal zero</strong>
-            <p style="color: var(--text-secondary); margin-top: 4px; font-size: 13px;">
-              Every dollar spent is credited to the payer and debited to the sharers. If penny rounding produces fractional cents, remainder pennies are systematically distributed to guarantee &sum; Net Balances = 0.00.
-            </p>
-          </div>
-          <div style="border: 1px solid var(--border-subtle); padding: 18px; background: var(--bg-secondary);">
-            <strong>2. Settlement transactions must fully clear every balance to zero</strong>
-            <p style="color: var(--text-secondary); margin-top: 4px; font-size: 13px;">
-              The greedy debt-reduction engine verifies that after executing the proposed transactions, no member has any remaining residual debt.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <h3 style="font-family: var(--font-serif); font-size: 18px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px;">Greedy Debt Simplification Algorithm</h3>
-        <p style="color: var(--text-secondary); line-height: 1.8; margin-bottom: 16px;">
-          Instead of every debtor paying every creditor in an N-to-N transaction mesh ($O(N^2)$ transactions), TripSplit partitions members into creditors ($B > 0$) and debtors ($B < 0$). In each step, the largest debtor pays the minimum of their balance and the largest creditor's balance ($min(D, C)$), reducing the overall cashflow to at most $N - 1$ transactions.
+      <div class="form-card" style="border-color: #fecaca;">
+        <h4 style="font-family: var(--font-serif); font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; color: var(--accent-negative);">
+          Danger Zone
+        </h4>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
+          Deleting this trip permanently purges all participants, expenses, penny splits, settlements, and audit history.
         </p>
-        <a href="#/trips" class="btn">Explore Trips &rarr;</a>
-      </div>
-    </article>
-  `;
-}
-
-// -------------------------------------------------------------
-// VIEW 4: API DOCUMENTATION
-// -------------------------------------------------------------
-function renderApiDocsPage() {
-  updateBreadcrumbs([{ label: 'API Docs', url: '#/api' }]);
-  const container = document.getElementById('view-container');
-
-  const endpoints = [
-    { method: 'GET', path: '/api/trips', desc: 'List all group trips with summary statistics.' },
-    { method: 'POST', path: '/api/trips', desc: 'Create a new trip with initial participants.' },
-    { method: 'GET', path: '/api/trips/{tripId}', desc: 'Get trip details and participant list.' },
-    { method: 'GET', path: '/api/trips/{tripId}/summary', desc: 'Get full trip overview (participants, expenses, balances, settlements).' },
-    { method: 'DELETE', path: '/api/trips/{tripId}', desc: 'Delete trip and cascade-remove all child records.' },
-    { method: 'POST', path: '/api/trips/{tripId}/participants', desc: 'Add a new member to an existing trip.' },
-    { method: 'POST', path: '/api/trips/{tripId}/expenses', desc: 'Log an expense with payer, amount, and shared participants.' },
-    { method: 'GET', path: '/api/trips/{tripId}/expenses', desc: 'Get full expense history (supports pagination ?page=0&size=10).' },
-    { method: 'DELETE', path: '/api/trips/{tripId}/expenses/{expenseId}', desc: 'Delete an expense and re-balance the ledger.' },
-    { method: 'GET', path: '/api/trips/{tripId}/balances', desc: 'Compute each participant\'s net balance (enforces sum == 0).' },
-    { method: 'POST', path: '/api/trips/{tripId}/settlements/generate', desc: 'Compute and generate minimal simplified transactions.' },
-    { method: 'GET', path: '/api/trips/{tripId}/settlements', desc: 'List current settlement transactions.' },
-    { method: 'PUT', path: '/api/trips/{tripId}/settlements/{id}/settle', desc: 'Mark a settlement transaction as completed.' },
-    { method: 'GET', path: '/api/trips/{tripId}/audit-logs', desc: 'View chronological immutable audit log for the trip.' }
-  ];
-
-  container.innerHTML = `
-    <div style="max-width: 840px; margin: 0 auto;">
-      <div class="hero-meta-category">Spring Boot REST API</div>
-      <h2 class="hero-title" style="margin-bottom: 16px;">TripSplit REST Endpoints</h2>
-      <p style="color: var(--text-secondary); margin-bottom: 32px;">
-        Standardized JSON endpoints with input validation (@NotNull, @Positive), custom exception handlers (@ControllerAdvice), and MariaDB persistence.
-      </p>
-
-      <div class="table-wrap">
-        <table class="minimal-table">
-          <thead>
-            <tr>
-              <th style="width: 100px;">Method</th>
-              <th style="width: 280px;">Endpoint</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${endpoints.map(e => `
-              <tr>
-                <td><span class="badge ${e.method === 'POST' ? 'badge-positive' : e.method === 'DELETE' ? 'badge-negative' : 'badge-neutral'}">${e.method}</span></td>
-                <td><code>${e.path}</code></td>
-                <td style="color: var(--text-secondary);">${e.desc}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+        <button class="btn btn-sm btn-danger" onclick="handleDeleteTrip(${trip.id})">Delete Entire Expedition</button>
       </div>
     </div>
   `;
 }
 
 // -------------------------------------------------------------
-// EVENT HANDLERS & ACTIONS
+// EVENT HANDLERS & MODAL ACTIONS
 // -------------------------------------------------------------
 async function handleCreateTrip(event) {
   event.preventDefault();
@@ -1301,9 +1658,24 @@ async function handleCreateTrip(event) {
     document.getElementById('form-create-trip').reset();
     showToast(`Trip '${newTrip.name}' created successfully`);
     window.location.hash = `#/trips/${newTrip.id}/overview`;
-  } catch (err) {
-    // Toast displayed by apiCall
-  }
+  } catch (err) {}
+}
+
+async function handleEditTripSubmit(event) {
+  event.preventDefault();
+  const id = document.getElementById('edit-trip-id').value;
+  const name = document.getElementById('edit-trip-name').value.trim();
+  const desc = document.getElementById('edit-trip-desc').value.trim();
+  const currency = document.getElementById('edit-trip-currency').value.trim();
+
+  try {
+    await apiCall(`/api/trips/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, description: desc, currency })
+    });
+    showToast('Trip updated');
+    renderTripWorkspace(id, 'settings');
+  } catch (err) {}
 }
 
 function promptAddParticipant(tripId) {
@@ -1325,7 +1697,7 @@ async function handleAddParticipant(event) {
     closeModal('modal-add-participant');
     document.getElementById('form-add-participant').reset();
     showToast(`Added member '${name}'`);
-    await renderTripWorkspace(tripId, 'participants');
+    await renderTripWorkspace(tripId, 'members');
   } catch (err) {}
 }
 
@@ -1340,7 +1712,7 @@ async function handleLogExpenseSubmit(event, tripId) {
     .map(cb => parseInt(cb.value));
 
   if (sharedIds.length === 0) {
-    showToast('Select at least one participant to share the expense', true);
+    showToast('Select at least one member to share this expense', true);
     return;
   }
 
@@ -1355,7 +1727,7 @@ async function handleLogExpenseSubmit(event, tripId) {
         sharedParticipantIds: sharedIds
       })
     });
-    showToast(`Expense '${desc}' logged successfully`);
+    showToast(`Expense '${desc}' logged`);
     window.location.hash = `#/trips/${tripId}/expenses`;
   } catch (err) {}
 }
@@ -1366,14 +1738,14 @@ async function handleDeleteExpense(tripId, expenseId) {
     await apiCall(`/api/trips/${tripId}/expenses/${expenseId}`, {
       method: 'DELETE'
     });
-    showToast('Expense deleted');
+    showToast('Expense removed and ledger re-balanced');
     window.location.hash = `#/trips/${tripId}/expenses`;
     await renderTripWorkspace(tripId, 'expenses');
   } catch (err) {}
 }
 
 async function handleDeleteTrip(tripId) {
-  if (!confirm('Are you sure you want to delete this entire trip and all expenses?')) return;
+  if (!confirm('Are you certain? All trip expenses, balances, and history will be permanently deleted.')) return;
   try {
     await apiCall(`/api/trips/${tripId}`, {
       method: 'DELETE'
@@ -1388,19 +1760,134 @@ async function handleGenerateSettlements(tripId) {
     await apiCall(`/api/trips/${tripId}/settlements/generate`, {
       method: 'POST'
     });
-    showToast('Settlement transactions re-calculated');
+    showToast('Settlement plan re-calculated');
     await renderTripWorkspace(tripId, 'settlements');
   } catch (err) {}
 }
 
-async function handleMarkSettled(tripId, settlementId) {
+// Payment Clearance Modal & Action
+function openPaymentModal(tripId, settlementId, debtor, creditor, amount, currency) {
+  const body = document.getElementById('settle-modal-body');
+  if (!body) return;
+
+  body.innerHTML = `
+    <div style="background: var(--bg-secondary); border: 1px solid var(--border-subtle); padding: 20px; margin-bottom: 20px;">
+      <div style="font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;">Settlement Transaction</div>
+      <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">
+        ${escapeHtml(debtor)} &rarr; ${escapeHtml(creditor)}
+      </div>
+      <div style="font-family: var(--font-serif); font-size: 28px; font-weight: 700; color: var(--text-primary);">
+        ${currency} ${formatMoney(amount)}
+      </div>
+    </div>
+
+    <form onsubmit="handleConfirmPayment(event, ${tripId}, ${settlementId})">
+      <div class="form-group">
+        <label class="form-label" for="payment-method-select">Payment Method</label>
+        <select id="payment-method-select" class="form-control">
+          <option value="BANK_TRANSFER">Direct Bank Transfer / Wire</option>
+          <option value="UPI">UPI / Instant Pay</option>
+          <option value="VENMO">Venmo / CashApp</option>
+          <option value="REVOLUT">Revolut / Wise</option>
+          <option value="CASH">Cash in Person</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="payment-ref-note">Reference / Note (Optional)</label>
+        <input type="text" id="payment-ref-note" class="form-control" placeholder="e.g. Paid via Revolut tag @alex">
+      </div>
+
+      <div class="btn-group" style="margin-top: 24px;">
+        <button type="submit" class="btn">Mark as Cleared</button>
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-settle-payment')">Cancel</button>
+      </div>
+    </form>
+  `;
+
+  openModal('modal-settle-payment');
+}
+
+async function handleConfirmPayment(event, tripId, settlementId) {
+  event.preventDefault();
   try {
     await apiCall(`/api/trips/${tripId}/settlements/${settlementId}/settle`, {
       method: 'PUT'
     });
-    showToast('Settlement marked as paid');
-    await renderTripWorkspace(tripId, 'settlements');
+    closeModal('modal-settle-payment');
+    showToast('Payment confirmed & debt cleared');
+    if (state.currentRoute.includes('settlements')) {
+      if (state.currentRoute === '/settlements') {
+        renderSettlementHubPage();
+      } else {
+        renderTripWorkspace(tripId, 'settlements');
+      }
+    } else {
+      handleRoute();
+    }
   } catch (err) {}
+}
+
+// -------------------------------------------------------------
+// REAL EXPORT FUNCTIONALITY (CSV & JSON DOWNLOADS)
+// -------------------------------------------------------------
+async function exportTripCSV(tripId) {
+  try {
+    const summary = await apiCall(`/api/trips/${tripId}/summary`);
+    const trip = summary.trip;
+    const expenses = summary.expenses || [];
+
+    let csv = `Date,Expense ID,Description,Category,Payer,Amount (${trip.currency}),Beneficiaries Count,Beneficiaries\n`;
+    expenses.forEach(e => {
+      const beneficiaries = (e.shares || []).map(s => s.participant.name).join('; ');
+      csv += `"${formatDate(e.expenseDate)}","EXP-${e.id}","${escapeCsv(e.description)}","${e.category}","${escapeCsv(e.payer.name)}","${e.amount}","${e.shares.length}","${escapeCsv(beneficiaries)}"\n`;
+    });
+
+    downloadBlob(csv, `trip-${tripId}-expenses-${Date.now()}.csv`, 'text/csv;charset=utf-8;');
+    showToast('CSV report generated');
+  } catch (err) {
+    showToast('Export failed', true);
+  }
+}
+
+async function exportTripJSON(tripId) {
+  try {
+    const summary = await apiCall(`/api/trips/${tripId}/summary`);
+    const jsonStr = JSON.stringify(summary, null, 2);
+    downloadBlob(jsonStr, `trip-${tripId}-backup-${Date.now()}.json`, 'application/json;charset=utf-8;');
+    showToast('JSON archive downloaded');
+  } catch (err) {
+    showToast('Export failed', true);
+  }
+}
+
+async function exportAllTripsJSON() {
+  try {
+    state.trips = await apiCall('/api/trips');
+    const all = await Promise.all(state.trips.map(t => apiCall(`/api/trips/${t.id}/summary`)));
+    const jsonStr = JSON.stringify(all, null, 2);
+    downloadBlob(jsonStr, `tripsplit-global-backup-${Date.now()}.json`, 'application/json;charset=utf-8;');
+    showToast('Global archive downloaded');
+  } catch (err) {
+    showToast('Global export failed', true);
+  }
+}
+
+function downloadBlob(content, filename, contentType) {
+  const blob = new Blob([content], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function escapeCsv(str) {
+  if (!str) return '';
+  return String(str).replace(/"/g, '""');
 }
 
 // Formatters

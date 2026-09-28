@@ -58,6 +58,23 @@ public class TripService {
     }
 
     @Transactional
+    public Trip updateTrip(Long id, CreateTripRequest request) {
+        Trip trip = getTripById(id);
+        if (request.getName() != null && !request.getName().trim().isEmpty()) {
+            trip.setName(request.getName().trim());
+        }
+        if (request.getDescription() != null) {
+            trip.setDescription(request.getDescription().trim());
+        }
+        if (request.getCurrency() != null && !request.getCurrency().trim().isEmpty()) {
+            trip.setCurrency(request.getCurrency().trim());
+        }
+        Trip updated = tripRepository.save(trip);
+        auditService.record(updated, "TRIP_UPDATED", "Updated trip details for '" + updated.getName() + "'.");
+        return updated;
+    }
+
+    @Transactional
     public Participant addParticipant(Long tripId, AddParticipantRequest request) {
         Trip trip = getTripById(tripId);
         Participant participant = new Participant(request.getName().trim(), request.getEmail(), trip);

@@ -78,6 +78,13 @@ public class TripController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/{tripId}")
+    public ResponseEntity<Trip> updateTrip(@PathVariable Long tripId,
+                                          @RequestBody CreateTripRequest request) {
+        Trip updated = tripService.updateTrip(tripId, request);
+        return ResponseEntity.ok(updated);
+    }
+
     @DeleteMapping("/{tripId}")
     public ResponseEntity<Void> deleteTrip(@PathVariable Long tripId) {
         tripService.deleteTrip(tripId);

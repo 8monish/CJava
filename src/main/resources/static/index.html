@@ -3,73 +3,108 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MINIMAL — TripSplit Expense Tracker</title>
+  <title>TripSplit — Intelligent Group Expense Settlement</title>
+  <meta name="description" content="TripSplit group travel expense tracking and debt simplification system. Settle shared costs with zero friction and minimal transactions.">
   <link rel="stylesheet" href="index.css">
   <script src="index.js" defer></script>
 </head>
 <body>
 
-  <!-- Top Header matching Minimal Theme in Image -->
-  <header class="primary-header">
+  <!-- Top Global Header with TripSplit branding -->
+  <header class="primary-header" id="site-header">
     <div class="site-container header-inner">
-      <a href="#/trips" class="logo-link" id="nav-logo">
-        <h1 class="logo-title">MINIMAL</h1>
-        <div class="logo-sub">TripSplit · Expense Tracker</div>
+      <a href="#/explore" class="logo-link" id="nav-logo" aria-label="TripSplit Home">
+        <h1 class="logo-title">TRIPSPLIT</h1>
+        <div class="logo-sub">Group Travel &middot; Expense Settlement</div>
       </a>
-      <nav>
-        <ul class="primary-nav">
-          <li><a href="#/home" class="nav-link" id="nav-home">Home</a></li>
+
+      <!-- Desktop Navigation Links -->
+      <nav aria-label="Main Navigation">
+        <ul class="primary-nav" id="desktop-nav">
+          <li><a href="#/explore" class="nav-link" id="nav-explore">Journal</a></li>
           <li><a href="#/trips" class="nav-link" id="nav-trips">Trips</a></li>
-          <li><a href="#/about" class="nav-link" id="nav-about">About</a></li>
-          <li><a href="#/api" class="nav-link" id="nav-api">API Docs</a></li>
+          <li><a href="#/analytics" class="nav-link" id="nav-analytics">Analytics</a></li>
+          <li><a href="#/settlements" class="nav-link" id="nav-settlements">Settlement Hub</a></li>
+          <li><a href="#/settings" class="nav-link" id="nav-settings">Settings</a></li>
         </ul>
       </nav>
+
+      <!-- Header Action -->
+      <div class="header-actions">
+        <button class="btn btn-sm" onclick="openModal('modal-create-trip')">+ New Trip</button>
+        <button class="mobile-toggle" id="mobile-menu-btn" aria-label="Toggle navigation menu" onclick="toggleMobileNav()">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Navigation Drawer -->
+    <div class="mobile-nav" id="mobile-nav">
+      <a href="#/explore" class="mobile-nav-link" onclick="closeMobileNav()">Journal &middot; Explore</a>
+      <a href="#/trips" class="mobile-nav-link" onclick="closeMobileNav()">Trips Catalog</a>
+      <a href="#/analytics" class="mobile-nav-link" onclick="closeMobileNav()">Analytics &amp; Trends</a>
+      <a href="#/settlements" class="mobile-nav-link" onclick="closeMobileNav()">Settlement Hub</a>
+      <a href="#/settings" class="mobile-nav-link" onclick="closeMobileNav()">Settings</a>
+      <div style="margin-top: 20px; padding: 0 16px;">
+        <button class="btn btn-sm" style="width: 100%;" onclick="closeMobileNav(); openModal('modal-create-trip');">+ Create New Trip</button>
+      </div>
     </div>
   </header>
 
-  <!-- Nested Navigation Breadcrumbs Bar -->
-  <div class="breadcrumbs-bar" id="breadcrumbs-bar">
+  <!-- Nested Hierarchical Breadcrumbs Bar -->
+  <nav class="breadcrumbs-bar" aria-label="Breadcrumb Navigation" id="breadcrumbs-bar">
     <div class="site-container breadcrumbs-inner" id="breadcrumbs-container">
-      <a href="#/trips" class="breadcrumb-item">Minimal</a>
+      <a href="#/trips" class="breadcrumb-item">TripSplit</a>
       <span class="breadcrumb-separator">/</span>
       <span class="breadcrumb-current">Trips</span>
     </div>
-  </div>
+  </nav>
 
   <!-- Dynamic Content Area -->
-  <main class="site-container">
-    <div id="view-container">
+  <main class="site-container" id="main-content">
+    <div id="view-container" role="region" aria-live="polite">
       <!-- Injected dynamically by nested router in index.js -->
     </div>
   </main>
 
   <!-- Create Trip Modal -->
-  <div class="modal-overlay" id="modal-create-trip">
+  <div class="modal-overlay" id="modal-create-trip" role="dialog" aria-modal="true" aria-labelledby="modal-create-trip-title">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 class="modal-title">Create New Trip</h3>
-        <button class="modal-close" onclick="closeModal('modal-create-trip')">&times;</button>
+        <h3 class="modal-title" id="modal-create-trip-title">Create New Trip</h3>
+        <button class="modal-close" aria-label="Close modal" onclick="closeModal('modal-create-trip')">&times;</button>
       </div>
       <form id="form-create-trip" onsubmit="handleCreateTrip(event)">
         <div class="form-group">
           <label class="form-label" for="trip-name-input">Trip Name</label>
-          <input type="text" id="trip-name-input" class="form-control" placeholder="e.g. Kyoto Autumn Tour 2026" required>
+          <input type="text" id="trip-name-input" class="form-control" placeholder="e.g. Patagonia Circuit 2026" required autocomplete="off">
         </div>
         <div class="form-group">
-          <label class="form-label" for="trip-desc-input">Description</label>
-          <textarea id="trip-desc-input" class="form-control" placeholder="Brief notes about the itinerary, destination, or purpose..."></textarea>
+          <label class="form-label" for="trip-desc-input">Description / Notes</label>
+          <textarea id="trip-desc-input" class="form-control" placeholder="Itinerary notes, group goals, or travel details..."></textarea>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="trip-currency-input">Base Currency</label>
+            <select id="trip-currency-input" class="form-control" required>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+              <option value="GBP">GBP (£)</option>
+              <option value="INR">INR (₹)</option>
+              <option value="JPY">JPY (¥)</option>
+              <option value="CAD">CAD (C$)</option>
+              <option value="AUD">AUD (A$)</option>
+              <option value="CHF">CHF (CHF)</option>
+            </select>
+          </div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="trip-currency-input">Currency Symbol / Code</label>
-          <input type="text" id="trip-currency-input" class="form-control" value="USD" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="trip-participants-input">Initial Participants (Comma-separated)</label>
-          <input type="text" id="trip-participants-input" class="form-control" placeholder="Alice, Bob, Charlie, Diana">
-          <small style="color: var(--text-muted); font-size: 11px;">You can add more participants anytime later.</small>
+          <label class="form-label" for="trip-participants-input">Initial Group Members (Comma-separated)</label>
+          <input type="text" id="trip-participants-input" class="form-control" placeholder="Alice Chen, Bob Miller, Charlie Davis, Diana Ross">
+          <small style="color: var(--text-muted); font-size: 11px;">You can also add or invite more participants anytime from the Members tab.</small>
         </div>
         <div class="btn-group" style="margin-top: 24px;">
-          <button type="submit" class="btn">Create Trip</button>
+          <button type="submit" class="btn">Create Workspace</button>
           <button type="button" class="btn btn-secondary" onclick="closeModal('modal-create-trip')">Cancel</button>
         </div>
       </form>
@@ -77,38 +112,101 @@
   </div>
 
   <!-- Add Participant Modal -->
-  <div class="modal-overlay" id="modal-add-participant">
+  <div class="modal-overlay" id="modal-add-participant" role="dialog" aria-modal="true" aria-labelledby="modal-add-participant-title">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 class="modal-title">Add Participant</h3>
-        <button class="modal-close" onclick="closeModal('modal-add-participant')">&times;</button>
+        <h3 class="modal-title" id="modal-add-participant-title">Add Member to Trip</h3>
+        <button class="modal-close" aria-label="Close modal" onclick="closeModal('modal-add-participant')">&times;</button>
       </div>
       <form id="form-add-participant" onsubmit="handleAddParticipant(event)">
         <input type="hidden" id="participant-trip-id">
         <div class="form-group">
           <label class="form-label" for="participant-name-input">Full Name</label>
-          <input type="text" id="participant-name-input" class="form-control" placeholder="e.g. Emma Watson" required>
+          <input type="text" id="participant-name-input" class="form-control" placeholder="e.g. Elena Rostova" required autocomplete="off">
         </div>
         <div class="form-group">
           <label class="form-label" for="participant-email-input">Email Address (Optional)</label>
-          <input type="email" id="participant-email-input" class="form-control" placeholder="emma@example.com">
+          <input type="email" id="participant-email-input" class="form-control" placeholder="elena@example.com">
         </div>
         <div class="btn-group" style="margin-top: 24px;">
-          <button type="submit" class="btn">Add to Trip</button>
+          <button type="submit" class="btn">Add Member</button>
           <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-participant')">Cancel</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Toast Notification -->
-  <div id="toast" class="toast">Action completed</div>
+  <!-- Edit Trip Details Modal -->
+  <div class="modal-overlay" id="modal-edit-trip" role="dialog" aria-modal="true" aria-labelledby="modal-edit-trip-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-edit-trip-title">Edit Trip Details</h3>
+        <button class="modal-close" aria-label="Close modal" onclick="closeModal('modal-edit-trip')">&times;</button>
+      </div>
+      <form id="form-edit-trip" onsubmit="handleEditTripSubmit(event)">
+        <input type="hidden" id="edit-trip-id">
+        <div class="form-group">
+          <label class="form-label" for="edit-trip-name">Trip Name</label>
+          <input type="text" id="edit-trip-name" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="edit-trip-desc">Description</label>
+          <textarea id="edit-trip-desc" class="form-control"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="edit-trip-currency">Currency Code</label>
+          <input type="text" id="edit-trip-currency" class="form-control" required>
+        </div>
+        <div class="btn-group" style="margin-top: 24px;">
+          <button type="submit" class="btn">Save Changes</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-edit-trip')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
-  <!-- Minimal Footer -->
+  <!-- Settlement Payment / Virtual Clearance Modal -->
+  <div class="modal-overlay" id="modal-settle-payment" role="dialog" aria-modal="true" aria-labelledby="modal-settle-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-settle-title">Record Settlement Payment</h3>
+        <button class="modal-close" aria-label="Close modal" onclick="closeModal('modal-settle-payment')">&times;</button>
+      </div>
+      <div id="settle-modal-body">
+        <!-- Injected dynamically with transaction details -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive"></div>
+
+  <!-- Commercial Minimalist Footer -->
   <footer>
     <div class="site-container footer-inner">
-      <div>TripSplit &copy; 2026 &middot; Question 69 Group Travel Expense Settlement Tracker</div>
-      <div>Minimal Monochromatic Theme &middot; Spring Boot 4 Backend</div>
+      <div class="footer-col">
+        <div class="footer-brand">TRIPSPLIT &middot; GROUP EXPENSE SETTLEMENT</div>
+        <p class="footer-desc">Precision group travel cost accounting with zero-sum invariant verification and greedy debt minimization.</p>
+      </div>
+      <div class="footer-links-col">
+        <div class="footer-col-title">Navigation</div>
+        <a href="#/explore">Journal</a>
+        <a href="#/trips">Trips</a>
+        <a href="#/analytics">Analytics</a>
+        <a href="#/settlements">Settlement Hub</a>
+        <a href="#/settings">Settings</a>
+      </div>
+      <div class="footer-links-col">
+        <div class="footer-col-title">Engine</div>
+        <span>Spring Boot 4.1.1</span>
+        <span>MariaDB Dialect</span>
+        <span>JPA / Hibernate</span>
+        <span style="color: var(--accent-positive);">&bull; All Services Operational</span>
+      </div>
+    </div>
+    <div class="site-container" style="border-top: 1px solid var(--border-subtle); padding-top: 20px; margin-top: 24px; display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px;">
+      <div>&copy; 2026 TripSplit Inc. All rights reserved.</div>
+      <div>Designed for Elegance &amp; Mathematical Exactitude</div>
     </div>
   </footer>
 
