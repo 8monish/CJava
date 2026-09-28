@@ -1,32 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<link rel="stylesheet" href="index.css">
-	<script src="index.js" defer></script>
-	<title>Spring Boot App</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MINIMAL — TripSplit Expense Tracker</title>
+  <link rel="stylesheet" href="index.css">
+  <script src="index.js" defer></script>
 </head>
 <body>
-	<header id="primary-header">
-		<h1>Welcome</h1>
-	</header>
-	<table>
-		<tr>
-			<th>Id</th>
-			<th>Name</th>
-			<th>Email</th>
-			<th>Actions</th>
-		</tr>
-		<tbody id="user-table-body">
-			<!-- User data will be populated here -->
-		</tbody>
-	</table>
-	<main>
-		<p class="blue-color">Hello World!</p>
-	</main>
-	<footer>
-		<p>Spring Boot App</p>
-	</footer>
+
+  <!-- Top Header matching Minimal Theme in Image -->
+  <header class="primary-header">
+    <div class="site-container header-inner">
+      <a href="#/trips" class="logo-link" id="nav-logo">
+        <h1 class="logo-title">MINIMAL</h1>
+        <div class="logo-sub">TripSplit · Expense Tracker</div>
+      </a>
+      <nav>
+        <ul class="primary-nav">
+          <li><a href="#/home" class="nav-link" id="nav-home">Home</a></li>
+          <li><a href="#/trips" class="nav-link" id="nav-trips">Trips</a></li>
+          <li><a href="#/about" class="nav-link" id="nav-about">About</a></li>
+          <li><a href="#/api" class="nav-link" id="nav-api">API Docs</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Nested Navigation Breadcrumbs Bar -->
+  <div class="breadcrumbs-bar" id="breadcrumbs-bar">
+    <div class="site-container breadcrumbs-inner" id="breadcrumbs-container">
+      <a href="#/trips" class="breadcrumb-item">Minimal</a>
+      <span class="breadcrumb-separator">/</span>
+      <span class="breadcrumb-current">Trips</span>
+    </div>
+  </div>
+
+  <!-- Dynamic Content Area -->
+  <main class="site-container">
+    <div id="view-container">
+      <!-- Injected dynamically by nested router in index.js -->
+    </div>
+  </main>
+
+  <!-- Create Trip Modal -->
+  <div class="modal-overlay" id="modal-create-trip">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Create New Trip</h3>
+        <button class="modal-close" onclick="closeModal('modal-create-trip')">&times;</button>
+      </div>
+      <form id="form-create-trip" onsubmit="handleCreateTrip(event)">
+        <div class="form-group">
+          <label class="form-label" for="trip-name-input">Trip Name</label>
+          <input type="text" id="trip-name-input" class="form-control" placeholder="e.g. Kyoto Autumn Tour 2026" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="trip-desc-input">Description</label>
+          <textarea id="trip-desc-input" class="form-control" placeholder="Brief notes about the itinerary, destination, or purpose..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="trip-currency-input">Currency Symbol / Code</label>
+          <input type="text" id="trip-currency-input" class="form-control" value="USD" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="trip-participants-input">Initial Participants (Comma-separated)</label>
+          <input type="text" id="trip-participants-input" class="form-control" placeholder="Alice, Bob, Charlie, Diana">
+          <small style="color: var(--text-muted); font-size: 11px;">You can add more participants anytime later.</small>
+        </div>
+        <div class="btn-group" style="margin-top: 24px;">
+          <button type="submit" class="btn">Create Trip</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-create-trip')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Participant Modal -->
+  <div class="modal-overlay" id="modal-add-participant">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Add Participant</h3>
+        <button class="modal-close" onclick="closeModal('modal-add-participant')">&times;</button>
+      </div>
+      <form id="form-add-participant" onsubmit="handleAddParticipant(event)">
+        <input type="hidden" id="participant-trip-id">
+        <div class="form-group">
+          <label class="form-label" for="participant-name-input">Full Name</label>
+          <input type="text" id="participant-name-input" class="form-control" placeholder="e.g. Emma Watson" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="participant-email-input">Email Address (Optional)</label>
+          <input type="email" id="participant-email-input" class="form-control" placeholder="emma@example.com">
+        </div>
+        <div class="btn-group" style="margin-top: 24px;">
+          <button type="submit" class="btn">Add to Trip</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-participant')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast">Action completed</div>
+
+  <!-- Minimal Footer -->
+  <footer>
+    <div class="site-container footer-inner">
+      <div>TripSplit &copy; 2026 &middot; Question 69 Group Travel Expense Settlement Tracker</div>
+      <div>Minimal Monochromatic Theme &middot; Spring Boot 4 Backend</div>
+    </div>
+  </footer>
+
 </body>
 </html>
