@@ -69,7 +69,13 @@ public class DataSeeder implements CommandLineRunner {
         expenseService.logExpense(trip.getId(), exp1);
 
         // Expense 2: Rental SUV & Petrol
-        CreateExpenseRequest exp2 = new CreateExpenseRequest();
+        CreateExpenseRequest exp2 = new CreateExpeexpense_shares  |
+| expenses        |
+| participants    |
+| settlements     |
+| trips           |
+| users           |
++------nseRequest();
         exp2.setDescription("Rental SUV & Highway Tolls");
         exp2.setAmount(new BigDecimal("260.00"));
         exp2.setCategory("TRANSPORT");
@@ -100,7 +106,13 @@ public class DataSeeder implements CommandLineRunner {
 
         // Expense 5: Local Market Groceries
         CreateExpenseRequest exp5 = new CreateExpenseRequest();
-        exp5.setDescription("Organic Groceries, Fruit & Trail Mix");
+        exp5.setDescription("Organic Groceexpense_shares  |\n" + //
+                        "| expenses        |\n" + //
+                        "| participants    |\n" + //
+                        "| settlements     |\n" + //
+                        "| trips           |\n" + //
+                        "| users           |\n" + //
+                        "+------ries, Fruit & Trail Mix");
         exp5.setAmount(new BigDecimal("95.50"));
         exp5.setCategory("FOOD");
         exp5.setPayerId(diana.getId());
